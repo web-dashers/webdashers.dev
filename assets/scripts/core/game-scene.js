@@ -64,6 +64,16 @@ class PracticeMode {
       ceilingY: scene._level._ceilingY,
       speed: playerSpeed,
       physicsFrame: scene._physicsFrame,
+      dualMode: !!scene._isDual,
+      dualGameMode: scene?._getDualModeId ? scene._getDualModeId(scene._state2) : null,
+      dualIsMini: !!scene._state2?.isMini,
+      dualY: scene._state2?.y,
+      dualYVelocity: scene._state2?.yVelocity,
+      dualGravityFlipped: scene._state2?.gravityFlipped,
+      dualOnGround: scene._state2?.onGround,
+      dualOnCeiling: scene._state2?.onCeiling,
+      dualCanJump: scene._state2?.canJump,
+      dualIsJumping: scene._state2?.isJumping,
       timestamp: Date.now()
     };
     this.checkpoints.push(checkpoint);
@@ -311,13 +321,18 @@ class GameScene extends Phaser.Scene {
     this._orbGfx = null;
     this._orbGfxTimer = 0;
     this._player = new PlayerObject(this, this._state, this._level);
+    this._player._activationKey = "main";
     this._state2 = new PlayerState();
     this._player2 = new PlayerObject(this, this._state2, this._level);
+    this._player2._activationKey = "dual";
+    this._player2.setInvertedColors?.(true);
     this._isDual = false;
     this._player2.setCubeVisible(false);
     this._player2.setShipVisible(false);
     this._player2.setBallVisible(false);
     this._player2.setWaveVisible(false);
+    this._player2.setBirdVisible?.(false);
+    this._player2.setSpiderVisible(false);
     this._player2.setRobotVisible(false);
     this._colorManager = new ColorManager();
     this._practicedMode = new PracticeMode();
@@ -2966,7 +2981,7 @@ this._menuUpdateLogBtn = this.add.image(screenWidth - 30 - 50, 33, "GJ_WebSheet"
         if (this._practiceModeBarContainer) {
           this._practiceModeBarContainer.setVisible(isPracticeMode);
         }
-        this._audio.startMusic();
+        this._audio.startMusic(this._getCurrentMusicSyncOffset());
       }
     });
     this._saveCheckpointKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Z);
@@ -3203,17 +3218,31 @@ this._menuUpdateLogBtn = this.add.image(screenWidth - 30 - 50, 33, "GJ_WebSheet"
     const arrowL = this.add.image(55, cy - 25, "GJ_GameSheet03", "navArrowBtn_001.png").setScrollFactor(0).setDepth(154).setScale(1.1).setFlipX(true).setInteractive();
     const arrowR = this.add.image(sw - 55, cy - 25, "GJ_GameSheet03", "navArrowBtn_001.png").setScrollFactor(0).setDepth(154).setScale(1.1).setFlipX(false).setInteractive();
     const allLevels = window.allLevels || [];
+    const pageCount = allLevels.length + 1;
+    let currentPageIndex = allLevels.findIndex(l => l[2] === window.currentlevel[2]);
+    if (currentPageIndex < 0) currentPageIndex = 0;
+    const isComingSoonPage = () => currentPageIndex >= allLevels.length;
+    const getPageLevel = () => {
+      if (isComingSoonPage()) return allLevels[allLevels.length - 1] || window.currentlevel || [];
+      return allLevels[currentPageIndex] || window.currentlevel || [];
+    };
+    const applyCurrentPage = () => {
+      this._levelSelectIsComingSoonPage = isComingSoonPage();
+      if (!isComingSoonPage() && allLevels[currentPageIndex]) {
+        window.currentlevel = [...allLevels[currentPageIndex]];
+      }
+    };
+    applyCurrentPage();
     const dotY = sh - 36;
-    const maxDots = Math.min(allLevels.length, 28);
+    const maxDots = Math.min(pageCount, 28);
     const dotSpacing = 27;
     const dotStartX = cx - (maxDots - 1) * dotSpacing / 2;
     const dotObjs = [];
     const refreshDots = () => {
       for (const d of dotObjs) d.destroy();
       dotObjs.length = 0;
-      const idx = allLevels.findIndex(l => l[2] === window.currentlevel[2]);
       for (let di = 0; di < maxDots; di++) {
-        const active = di === idx;
+        const active = di === currentPageIndex;
         const d = this.add.graphics().setScrollFactor(0).setDepth(153);
         d.fillStyle(0xffffff, active ? 1 : 0.3);
         d.fillCircle(dotStartX + di * dotSpacing, dotY, 7);
@@ -3230,8 +3259,9 @@ this._menuUpdateLogBtn = this.add.image(screenWidth - 30 - 50, 33, "GJ_WebSheet"
     cardSlideContainer.add(cardBounceContainer);
     const cardContainer = cardSlideContainer;
     const cardBg = this.add.graphics();
-    const drawCardBg = (colorHex, dark = false) => {
+    const drawCardBg = (colorHex, dark = false, textOnly = false) => {
       cardBg.clear();
+      if (textOnly) return;
       const mul = dark ? 0.10 : 0.22;
       const r = Math.round(((colorHex >> 16) & 0xff) * mul);
       const g = Math.round(((colorHex >> 8)  & 0xff) * mul);
@@ -3239,7 +3269,7 @@ this._menuUpdateLogBtn = this.add.image(screenWidth - 30 - 50, 33, "GJ_WebSheet"
       cardBg.fillStyle((r << 16) | (g << 8) | b, 0.92);
       cardBg.fillRoundedRect(-cardW / 2, -cardH / 2, cardW, cardH, 14);
     };
-    drawCardBg(bgHex, isEveryEnd(window.currentlevel[2]));
+    drawCardBg(bgHex, isEveryEnd(window.currentlevel[2]), isComingSoonPage());
     cardBounceContainer.add(cardBg);
 
     const cardHit = this.add.zone(cardX, cardY, cardW, cardH)
@@ -3274,6 +3304,7 @@ this._menuUpdateLogBtn = this.add.image(screenWidth - 30 - 50, 33, "GJ_WebSheet"
     };
     cardHit.on("pointerdown", (ptr) => {
       onDragStart(ptr);
+      if (isComingSoonPage()) return;
       this.tweens.killTweensOf(cardBounceContainer, "scale");
       this.tweens.add({ targets: cardBounceContainer, scale: 1.26, duration: 300, ease: "Bounce.Out" });
     });
@@ -3331,6 +3362,9 @@ this._menuUpdateLogBtn = this.add.image(screenWidth - 30 - 50, 33, "GJ_WebSheet"
       } else {
         if (ptr.x >= cardX - cardW/2 && ptr.x <= cardX + cardW/2 &&
             ptr.y >= cardY - cardH/2 && ptr.y <= cardY + cardH/2) {
+            if (isComingSoonPage()) {
+              return;
+            }
             
             this.input.enabled = false;
             this.tweens.killTweensOf(cardBounceContainer, "scale");
@@ -3377,6 +3411,16 @@ this._menuUpdateLogBtn = this.add.image(screenWidth - 30 - 50, 33, "GJ_WebSheet"
     const buildCardContent = () => {
       for (const o of cardContentObjs) { this.tweens.killTweensOf(o); o.destroy(); }
       cardContentObjs.length = 0;
+      if (isComingSoonPage()) {
+        this.tweens.killTweensOf(cardBounceContainer, "scale");
+        cardBounceContainer.setScale(1);
+        const comingSoonLabel = this.add.bitmapText(0, 0, "bigFont", "Coming Soon!", 56)
+          .setScrollFactor(0).setDepth(155).setOrigin(0.5, 0.5);
+        comingSoonLabel.setScale(Math.min(1, (cardW - 40) / comingSoonLabel.width));
+        cardContentObjs.push(comingSoonLabel);
+        cardBounceContainer.add(comingSoonLabel);
+        return;
+      }
       const lvl = window.currentlevel;
       const levelId = lvl[2] || "level_1";
       const levelDifficultyMap = {
@@ -3462,6 +3506,7 @@ this._menuUpdateLogBtn = this.add.image(screenWidth - 30 - 50, 33, "GJ_WebSheet"
     const buildBar = () => {
       for (const o of barObjs) { this.tweens.killTweensOf(o); o.destroy(); }
       barObjs.length = 0;
+      if (isComingSoonPage()) return;
       const bestNormal = parseFloat(localStorage.getItem("bestPercent_" + (window.currentlevel[2] || "level_1")) || "0");
       const modeLabel = this.add.bitmapText(cx, barAreaY - 40, "bigFont", "Normal Mode", 30)
         .setScrollFactor(0).setDepth(155).setOrigin(0.5, 0.5);
@@ -3526,17 +3571,17 @@ this._menuUpdateLogBtn = this.add.image(screenWidth - 30 - 50, 33, "GJ_WebSheet"
     buildBar();
     let _currentAnimUpdate = null;
     const switchLevel = (dir, startX = null, dragVel = 0) => {
-      if (!window.allLevels || window.allLevels.length === 0) return;
+      if (pageCount <= 0) return;
 
       if (_currentAnimUpdate) {
         this.events.off("preupdate", _currentAnimUpdate);
         _currentAnimUpdate = null;
       }
-      let idx = window.allLevels.findIndex(l => l[2] === window.currentlevel[2]);
-      idx = (idx + dir + window.allLevels.length) % window.allLevels.length;
-      window.currentlevel = [...window.allLevels[idx]];
-      const newColors = this._parseLevelColors(window.currentlevel[2]);
-      const dark = isEveryEnd(window.currentlevel[2]);
+      currentPageIndex = (currentPageIndex + dir + pageCount) % pageCount;
+      applyCurrentPage();
+      const pageLevel = getPageLevel();
+      const newColors = this._parseLevelColors(pageLevel[2]);
+      const dark = isEveryEnd(pageLevel[2]);
       const slideDist = cardW - 200;
       const slideOutTarget = -dir * slideDist;
       const slideInStart = dir * slideDist;
@@ -3562,7 +3607,7 @@ this._menuUpdateLogBtn = this.add.image(screenWidth - 30 - 50, 33, "GJ_WebSheet"
             }
             cardContentObjs.length = 0;
             barObjs.length = 0;
-            drawCardBg(newColors.bgHex, dark);
+            drawCardBg(newColors.bgHex, dark, isComingSoonPage());
             buildCardContent();
             buildBar();
             drawOverlay(overlay, newColors.bgHex, dark);
@@ -3618,6 +3663,7 @@ this._menuUpdateLogBtn = this.add.image(screenWidth - 30 - 50, 33, "GJ_WebSheet"
       this._levelSelectCardContent = null;
       this._levelSelectBarObjs = null;
       this._levelSelectSwitchLevel = null;
+      this._levelSelectIsComingSoonPage = false;
     };
     if (silent) { destroy(); return; }
     const sw = screenWidth;
@@ -4015,6 +4061,7 @@ _buildSettingsPopup() {
     var infotextstuffsiwannabedonewiththis = {
         "Enable Portal Guide": "Enables extra indicators on portals.",
         "Enable Orb Guide": "Enables extra indicators on orbs.",
+        "Practice Music Bypass": "Plays normal mode music in practice mode.",
         "Show Percentage": "Shows the percentage you are at in a level.",
         "Percentage Decimals": "Shows decimals in level progress.",
         "Hitboxes on Death": "Shows hitboxes upon death in both normal and practice mode.",
@@ -4214,6 +4261,21 @@ _buildSettingsPopup() {
             () => window.speedHack, 
             (v) => window.speedHack = v
         );
+
+        createToggle(container, column2X, startY + spacingY, "Practice Music Bypass",
+            () => window.practiceMusicBypass,
+            (v) => {
+                const changed = !!window.practiceMusicBypass !== !!v;
+                window.practiceMusicBypass = v;
+                if (changed && !this._menuActive && this._practicedMode?.practiceMode) {
+                    this._practiceBypassPending = true;
+                }
+            },
+            null,
+            20,
+            true,
+            "Practice Music Bypass"
+        );
     };
 
     const buildVisualPage = (container) => {
@@ -4349,6 +4411,7 @@ _buildSettingsPopup() {
         showCPS: window.showCPS,
         speedHack: window.speedHack,
         macroBot: window.macroBot,
+        practiceMusicBypass: window.practiceMusicBypass,
         showGlow: window.showGlow,
         showEditorGlow: window.showEditorGlow,
         useDirectInternet: !!window.useDirectInternet,
@@ -4377,6 +4440,7 @@ _buildSettingsPopup() {
         showCPS: false,
         speedHack: 1.0,
         macroBot: false,
+        practiceMusicBypass: false,
         showGlow: true,
         showEditorGlow: false,
         useDirectInternet: true,
@@ -4399,6 +4463,7 @@ _buildSettingsPopup() {
     window.showCPS = data.showCPS;
     window.speedHack = data.speedHack;
     window.macroBot = data.macroBot;
+    window.practiceMusicBypass = !!data.practiceMusicBypass;
     window.showGlow = data.showGlow;
     window.showEditorGlow = data.showEditorGlow;
     window.createObjectIds = data.createObjectIds;
@@ -5474,6 +5539,7 @@ _buildSettingsPopup() {
     this._practiceBestPercent = parseFloat(localStorage.getItem("practiceBestPercent_" + (window.currentlevel[2] || "level_1")) || "0");
     
     this._menuActive = false;
+    this._practiceBypassPending = false;
     this._slideIn = true;
     if (this._menuGlitter) {
       this._menuGlitter.destroy();
@@ -5710,6 +5776,9 @@ _buildSettingsPopup() {
     this._player2.setShipVisible(false);
     this._player2.setBallVisible(false);
     this._player2.setWaveVisible(false);
+    this._player2.setBirdVisible?.(false);
+    this._player2.setSpiderVisible(false);
+    this._player2.setRobotVisible(false);
     this._levelAttempts = 1;
     this._levelJumps = 0;
     this._attempts++;
@@ -5762,13 +5831,52 @@ _buildSettingsPopup() {
       this._state.upKeyDown = true;
       this._state.upKeyPressed = true;
       this._state.queuedHold = true;
+      this._state._orbActivationConsumedForPress = false;
+      if (this._isDual && !this._state2.isDead) {
+        this._state2.upKeyDown = true;
+        this._state2.upKeyPressed = true;
+        this._state2.queuedHold = true;
+        this._state2._orbActivationConsumedForPress = false;
+      }
+      const _dualImmediateBeforeGravity = !!this._state.gravityFlipped;
+      let _primaryImmediateJumped = false;
       if (!this._state.isFlying && !this._state.isWave && !this._state.isUfo && this._state.canJump) {
         this._player.updateJump(0);
-        this._totalJumps++;
-        this._levelJumps++;
-        localStorage.setItem("gd_totalJumps", this._totalJumps);
+        _primaryImmediateJumped = true;
       } else if (this._state.isUfo) {
-        this._player.updateJump(0);
+        if (!this._player._shouldPrioritizeUfoOrbInput?.()) {
+          this._player.updateJump(0);
+          _primaryImmediateJumped = true;
+        }
+      }
+      const _primaryImmediateGravityChanged = this._isDual && !!this._state.gravityFlipped !== _dualImmediateBeforeGravity;
+      let _primaryImmediateGravitySynced = false;
+      if (_primaryImmediateGravityChanged) {
+        _primaryImmediateGravitySynced = this._syncDualGlobalsFromPrimary({
+          skipBallInputGravity: this._state.isBall && _primaryImmediateJumped
+        });
+      }
+      if (this._isDual && !this._state2.isDead) {
+        if (this._shouldSuppressDualGravityAction(this._state2, _primaryImmediateGravitySynced)) {
+          this._state2.upKeyPressed = false;
+          this._state2.queuedHold = false;
+        }
+        const _secondaryImmediateBeforeGravity = !!this._state2.gravityFlipped;
+        const _secondaryImmediateBallInput = this._state2.isBall && this._state2.upKeyPressed;
+        if (!this._state2.isFlying && !this._state2.isWave && !this._state2.isUfo && this._state2.canJump) {
+          this._player2.updateJump(0);
+        } else if (this._state2.isUfo) {
+          if (!this._player2._shouldPrioritizeUfoOrbInput?.()) {
+            this._player2.updateJump(0);
+          }
+        }
+        if (!!this._state2.gravityFlipped !== _secondaryImmediateBeforeGravity) {
+          this._syncDualGlobalsFromSecondary({
+            skipBallInputGravity: _secondaryImmediateBallInput
+          });
+        }
+      }
+      if (_primaryImmediateJumped) {
         this._totalJumps++;
         this._levelJumps++;
         localStorage.setItem("gd_totalJumps", this._totalJumps);
@@ -5783,6 +5891,11 @@ _buildSettingsPopup() {
     this._state.upKeyDown = false;
     this._state.upKeyPressed = false;
     this._state.queuedHold = false;
+    this._state._orbActivationConsumedForPress = false;
+    this._state2.upKeyDown = false;
+    this._state2.upKeyPressed = false;
+    this._state2.queuedHold = false;
+    this._state2._orbActivationConsumedForPress = false;
     if (!ignoreMacro && this._macroBot) {
       this._macroBot.recordEdge(false, this._physicsFrame);
     }
@@ -5967,6 +6080,8 @@ _buildSettingsPopup() {
     this._player2.setShipVisible(false);
     this._player2.setBallVisible(false);
     this._player2.setWaveVisible(false);
+    this._player2.setBirdVisible?.(false);
+    this._player2.setSpiderVisible(false);
     this._player2.setRobotVisible(false);
     this._glitterEmitter.stop();
     let speedKey = parseInt(window.settingsMap["kA4"] || "0");
@@ -6044,6 +6159,7 @@ _buildSettingsPopup() {
       }
     }
 
+    this._practiceBypassPending = false;
     this._audio.reset();
     this._audio.startMusic(musicOffset);
     this._paused = false;
@@ -6081,6 +6197,11 @@ _buildSettingsPopup() {
     if (this._player && this._player._hitboxTrail) {
       this._player._hitboxTrail = [];
     }
+    if (this._player?._hitboxGraphics) this._player._hitboxGraphics.clear();
+    if (this._player2 && this._player2._hitboxTrail) {
+      this._player2._hitboxTrail = [];
+    }
+    if (this._player2?._hitboxGraphics) this._player2._hitboxGraphics.clear();
 
     if (this._macroBot?.recording == true){
       this._macroBot?.clearRecording();
@@ -6090,16 +6211,24 @@ _buildSettingsPopup() {
     }
     this._level._updateGlowVisibility?.();
   }
+  _getSongOffsetForWorldX(worldX) {
+    const startX = Number.isFinite(Number(worldX)) ? Number(worldX) : 0;
+    return this._level?.getSongOffsetForX
+      ? this._level.getSongOffsetForX(startX, { sourceObjects: window.levelObjects })
+      : Math.max(0, startX) / 623.16;
+  }
   _getStartPosMusicOffset(){
     const startPositions = this._level.getStartPositions();
-    let musicOffset = 0;
     if (this._startPosIndex !== -1 && startPositions[this._startPosIndex]) {
-      const startX = startPositions[this._startPosIndex].x;
-      musicOffset = this._level?.getSongOffsetForX
-        ? this._level.getSongOffsetForX(startX, { sourceObjects: window.levelObjects })
-        : startX / 623.16;
+      return this._getSongOffsetForWorldX(startPositions[this._startPosIndex].x);
     }
-    return musicOffset;
+    return 0;
+  }
+  _getCurrentMusicSyncOffset() {
+    if (this._startPosIndex !== -1 && this._playerWorldX <= 0) {
+      return this._getStartPosMusicOffset();
+    }
+    return this._getSongOffsetForWorldX(this._playerWorldX);
   }
   _respawnFromCheckpoint() {
     const checkpoint = this._practicedMode.loadLastCheckpoint();
@@ -6229,6 +6358,39 @@ _buildSettingsPopup() {
       playerSpeed = SpeedPortal.FOUR_TIMES;
     }
     }
+    if (checkpoint.dualMode) {
+      this._isDual = false;
+      this._dualBallOverlapResolved = false;
+      this._state2.reset();
+      this._player2.reset();
+      this._player2.setInvertedColors?.(true);
+      this._enableDualMode();
+      this._state2.isDead = false;
+      if (Number.isFinite(Number(checkpoint.dualY))) this._state2.y = Number(checkpoint.dualY);
+      if (Number.isFinite(Number(checkpoint.dualYVelocity))) this._state2.yVelocity = Number(checkpoint.dualYVelocity);
+      if (checkpoint.dualIsMini !== undefined) this._state2.isMini = !!checkpoint.dualIsMini;
+      if (checkpoint.dualGameMode) this._setPlayerGamemode(this._player2, this._state2, checkpoint.dualGameMode, true);
+      if (checkpoint.dualGravityFlipped !== undefined) this._state2.gravityFlipped = !!checkpoint.dualGravityFlipped;
+      if (checkpoint.dualOnGround !== undefined) this._state2.onGround = !!checkpoint.dualOnGround;
+      if (checkpoint.dualOnCeiling !== undefined) this._state2.onCeiling = !!checkpoint.dualOnCeiling;
+      if (checkpoint.dualCanJump !== undefined) this._state2.canJump = !!checkpoint.dualCanJump;
+      if (checkpoint.dualIsJumping !== undefined) this._state2.isJumping = !!checkpoint.dualIsJumping;
+      this._copyDualInputFlags(this._state, this._state2);
+      this._ensureDualFlyBounds(this._state.y);
+    } else {
+      this._isDual = false;
+      this._state2.reset();
+      this._player2.reset();
+      this._player2.setCubeVisible(false);
+      this._player2.setShipVisible(false);
+      this._player2.setBallVisible(false);
+      this._player2.setWaveVisible(false);
+      this._player2.setBirdVisible?.(false);
+      this._player2.setSpiderVisible(false);
+      this._player2.setRobotVisible(false);
+      if (this._player2?._hitboxGraphics) this._player2._hitboxGraphics.clear();
+      if (this._player2) this._player2._hitboxTrail = [];
+    }
     this._level.resetColorTriggers();
     this._level.resetAlphaTriggers();
     this._level.resetRotateTriggers();
@@ -6247,13 +6409,21 @@ _buildSettingsPopup() {
     this._level.updateObjectDebugIds();
     this._updateBackground();
     this._applyMirrorEffect();
-    if (!this._audio.musicPlaying) {
+    this._practiceBypassPending = false;
+    if (window.practiceMusicBypass) {
+      this._audio.startMusic(this._getSongOffsetForWorldX(checkpoint.x));
+    } else if (!this._audio.musicPlaying) {
       this._audio.startMusic();
     }
 
     if (this._player && this._player._hitboxTrail) {
       this._player._hitboxTrail = [];
     }
+    if (this._player?._hitboxGraphics) this._player._hitboxGraphics.clear();
+    if (this._player2 && this._player2._hitboxTrail) {
+      this._player2._hitboxTrail = [];
+    }
+    if (this._player2?._hitboxGraphics) this._player2._hitboxGraphics.clear();
 
     this._physicsFrame = checkpoint.physicsFrame;
     if (this._macroBot?.recording == true){
@@ -6528,6 +6698,9 @@ _buildSettingsPopup() {
         if (this._creatorMenuOpen) return;
         this._spaceWasDown = true;
         if (this._levelSelectOverlay) {
+        if (this._levelSelectIsComingSoonPage) {
+          return;
+        }
         this._creatorMenuOpen;
         this.input.enabled = false;
 
@@ -6657,11 +6830,13 @@ _buildSettingsPopup() {
     if (!!this.input.activePointer.isDown && !this._state.upKeyDown && !this._state.isDead) {
       this._state.upKeyDown = true;
       this._state.queuedHold = true;
+      this._state._orbActivationConsumedForPress = false;
     }
     if (cancelInput) {
       this._state.upKeyDown = false;
       this._state.upKeyPressed = false;
       this._state.queuedHold = false;
+      this._state._orbActivationConsumedForPress = false;
     }
     this._level.updateEndPortalY(this._cameraY, this._state.isFlying || this._state.isWave || this._state.isUfo || this._state.isSpider);
     if (!this._levelWon && !this._state.isDead && this._level.endXPos > 0) {
@@ -6731,6 +6906,13 @@ _buildSettingsPopup() {
           this._player.drawHitboxes(this._player._hitboxGraphics, this._cameraX, this._cameraY);
         } else {
           this._player._hitboxGraphics.clear();
+        }
+      }
+      if (this._isDual && this._player2?._hitboxGraphics) {
+        if (window.showHitboxes || window.hitboxesOnDeath) {
+          this._player2.drawHitboxes(this._player2._hitboxGraphics, this._cameraX, this._cameraY);
+        } else {
+          this._player2._hitboxGraphics.clear();
         }
       }
       this._deathTimer += deltaTime;
@@ -6822,6 +7004,7 @@ _buildSettingsPopup() {
     let verticalDelta = subStepDelta * d;
     let horizontalDelta = subStepDelta * playerSpeed * d;
     const initialY = this._state.y;
+    const initialY2 = this._state2.y;
     for (let i = 0; i < subSteps; i++) {
       this._state.lastY = this._state.y;
       this._physicsFrame++;
@@ -6829,21 +7012,53 @@ _buildSettingsPopup() {
       if (this._macroBot?.playing) {
         this._macroBot.step(this._physicsFrame);
       }
+      const _dualInputState = {
+        upKeyDown: this._state.upKeyDown,
+        upKeyPressed: this._state.upKeyPressed,
+        queuedHold: this._state.queuedHold,
+        orbActivationConsumedForPress: !!this._state._orbActivationConsumedForPress
+      };
+      const _primaryGravityBefore = !!this._state.gravityFlipped;
+      const _primarySharedBefore = this._getDualSharedSignature(this._state);
       this._player.updateJump(verticalDelta);
       this._state.y += this._state.yVelocity * verticalDelta;
       this._player.checkCollisions(this._playerWorldX - centerX);
+      const _primaryGravityChanged = this._isDual && !!this._state.gravityFlipped !== _primaryGravityBefore;
+      let _primaryGravitySynced = false;
+      if (this._isDual && this._getDualSharedSignature(this._state) !== _primarySharedBefore) {
+        _primaryGravitySynced = this._syncDualGlobalsFromPrimary({
+          skipBallInputGravity: _primaryGravityChanged && this._state.isBall && _dualInputState.upKeyPressed
+        });
+      }
+      if (this._isDual && this._state.isDead && !this._state2.isDead) {
+        this._player2.killPlayer();
+      }
       this._playerWorldX += horizontalDelta;
       if (this._isDual && !this._state2.isDead) {
-        this._state2.upKeyDown = this._state.upKeyDown;
-        this._state2.upKeyPressed = this._state.upKeyPressed;
-        this._state2.queuedHold = this._state.queuedHold;
+        this._copyDualInputFlags(_dualInputState, this._state2);
+        if (this._shouldSuppressDualGravityAction(this._state2, _primaryGravitySynced)) {
+          this._state2.upKeyPressed = false;
+          this._state2.queuedHold = false;
+        }
         this._state2.lastY = this._state2.y;
+        const _secondarySharedBefore = this._getDualSharedSignature(this._state2);
+        const _secondaryBallInputGravity = this._state2.isBall && this._state2.upKeyPressed;
         this._player2.updateJump(verticalDelta);
         this._state2.y += this._state2.yVelocity * verticalDelta;
         this._player2.checkCollisions(this._playerWorldX - centerX - horizontalDelta);
-        if (this._state2.isDead && !this._state.isDead) {
+        if (this._isDual && !this._state2.isDead && this._getDualSharedSignature(this._state2) !== _secondarySharedBefore) {
+          this._syncDualGlobalsFromSecondary({
+            skipBallInputGravity: _secondaryBallInputGravity
+          });
+        }
+        this._resolveDualBallOverlap();
+        if (this._isDual && this._state2.isDead && !this._state.isDead) {
           this._player.killPlayer();
         }
+        if (this._isDual && this._state.isDead && !this._state2.isDead) {
+          this._player2.killPlayer();
+        }
+        if (this._isDual) this._ensureDualFlyBounds();
       }
       if (!this._state.isFlying && !this._state.isWave && !this._state.isUfo) {
         if (this._state.isBall) {
@@ -6857,6 +7072,18 @@ _buildSettingsPopup() {
           this._player.updateDashRotation(u);
         }
       }
+      if (this._isDual && !this._state2.isDead && !this._state2.isFlying && !this._state2.isWave && !this._state2.isUfo) {
+        if (this._state2.isBall) {
+          const ball2OnSurface = this._state2.onGround || this._state2.onCeiling;
+          this._player2.updateBallRoll(horizontalDelta, ball2OnSurface);
+        } else if (this._state2.onGround) {
+          this._player2.updateGroundRotation(verticalDelta);
+        } else if (this._player2.rotateActionActive) {
+          this._player2.updateRotateAction(u);
+        } else if (this._state2.isDashing) {
+          this._player2.updateDashRotation(u);
+        }
+      }
 
       if (!this._player._scene._slideIn){
         if (!this._player._hitboxTrail) this._player._hitboxTrail = [];
@@ -6865,9 +7092,16 @@ _buildSettingsPopup() {
           this._player._hitboxTrail.push({ x: this._playerWorldX, y: this._player.p.y, rotation: this._player._rotation, size: _trailSize, isWave: this._player.p.isWave });
           if (this._player._hitboxTrail.length > 180) this._player._hitboxTrail.shift();
         }
+        if (this._isDual && !this._player2.p.isDead) {
+          if (!this._player2._hitboxTrail) this._player2._hitboxTrail = [];
+          const _trailSize2 = this._player2.p.isMini ? 18 : 30;
+          this._player2._hitboxTrail.push({ x: this._playerWorldX, y: this._player2.p.y, rotation: this._player2._rotation, size: _trailSize2, isWave: this._player2.p.isWave });
+          if (this._player2._hitboxTrail.length > 180) this._player2._hitboxTrail.shift();
+        }
       }
     }
     this._state.lastY = initialY;
+    if (this._isDual) this._state2.lastY = initialY2;
     this._state.ignorePortals = false;
     this._state2.ignorePortals = false;
     if (!this._endCameraOverride) {
@@ -6974,6 +7208,9 @@ _buildSettingsPopup() {
     if (this._state.isFlying) {
       this._player.updateShipRotation(quantizedDelta);
     }
+    if (this._isDual && this._state2.isFlying && !this._state2.isDead) {
+    this._player2.updateShipRotation(quantizedDelta);
+  }
     const playerScreenX = this._playerWorldX - this._cameraX;
     this._player.syncSprites(this._cameraX, this._cameraY, deltaTime / 1000, this._getMirrorXOffset(playerScreenX));
     if (this._isDual && !this._state2.isDead) {
@@ -7011,47 +7248,370 @@ _applyMirrorEffect() {
     }
     this._bg.setFlipX(isMirrored);
   }
+  _getDualSharedSignature(state) {
+    if (!state) return "0|0";
+    return [
+      state.gravityFlipped ? 1 : 0,
+      state.mirrored ? 1 : 0
+    ].join("|");
+  }
+  _getDualModeId(state) {
+    if (!state) return "cube";
+    if (state.isFlying) return "ship";
+    if (state.isBall) return "ball";
+    if (state.isUfo) return "ufo";
+    if (state.isWave) return "wave";
+    if (state.isRobot) return "robot";
+    if (state.isSpider) return "spider";
+    return "cube";
+  }
+  _getGamemodePortalMode(portalType) {
+    switch (portalType) {
+      case "portal_cube":
+        return "cube";
+      case "portal_fly":
+        return "ship";
+      case "portal_ball":
+        return "ball";
+      case "portal_wave":
+        return "wave";
+      case "portal_ufo":
+        return "ufo";
+      case "portal_robot":
+        return "robot";
+      case "portal_spider":
+        return "spider";
+      default:
+        return null;
+    }
+  }
+  _setPlayerGamemode(player, state, mode, keepVelocity = true) {
+    if (!player || !state) return;
+    const currentMode = this._getDualModeId(state);
+    if (currentMode === mode) {
+      player.setCubeVisible(mode === "cube" || mode === "ufo");
+      player.setShipVisible(mode === "ship");
+      player.setBallVisible(mode === "ball");
+      player.setWaveVisible(mode === "wave");
+      player.setBirdVisible?.(mode === "ufo");
+      player.setRobotVisible(mode === "robot");
+      player.setSpiderVisible(mode === "spider");
+      return;
+    }
+    const saved = {
+      y: state.y,
+      yVelocity: state.yVelocity,
+      gravityFlipped: state.gravityFlipped,
+      upKeyDown: state.upKeyDown,
+      upKeyPressed: state.upKeyPressed,
+      queuedHold: state.queuedHold,
+      orbActivationConsumedForPress: !!state._orbActivationConsumedForPress,
+      mirrored: state.mirrored,
+      isMini: state.isMini
+    };
+    switch (mode) {
+      case "ship":
+        player.enterShipMode({ y: saved.y, portalY: saved.y }, true);
+        break;
+      case "ball":
+        player.enterBallMode({ y: saved.y, portalY: saved.y });
+        break;
+      case "ufo":
+        player.enterUfoMode({ y: saved.y, portalY: saved.y }, true);
+        break;
+      case "wave":
+        player.enterWaveMode({ y: saved.y, portalY: saved.y });
+        break;
+      case "robot":
+        player.enterRobotMode({ y: saved.y, portalY: saved.y });
+        break;
+      case "spider":
+        player.enterSpiderMode({ y: saved.y, portalY: saved.y });
+        break;
+      default:
+        player.exitShipMode();
+        player.exitBallMode();
+        player.exitUfoMode();
+        player.exitWaveMode();
+        player.exitRobotMode();
+        player.exitSpiderMode();
+        state.isFlying = false;
+        state.isBall = false;
+        state.isUfo = false;
+        state.isWave = false;
+        state.isRobot = false;
+        state.isSpider = false;
+        player.setShipVisible(false);
+        player.setBallVisible(false);
+        player.setWaveVisible(false);
+        player.setBirdVisible?.(false);
+        player.setRobotVisible(false);
+        player.setSpiderVisible(false);
+        player.setCubeVisible(true);
+        break;
+    }
+    state.y = saved.y;
+    if (keepVelocity && Number.isFinite(saved.yVelocity)) state.yVelocity = saved.yVelocity;
+    state.gravityFlipped = saved.gravityFlipped;
+    state.upKeyDown = saved.upKeyDown;
+    state.upKeyPressed = saved.upKeyPressed;
+    state.queuedHold = saved.queuedHold;
+    state._orbActivationConsumedForPress = !!saved.orbActivationConsumedForPress;
+    state.mirrored = saved.mirrored;
+    state.isMini = saved.isMini;
+  }
+  _getInitialDualPortalMode() {
+    if (!this._level || !this._player2 || !this._state2) return null;
+
+    const worldX = Number(this._playerWorldX);
+    const worldY = Number(this._state2.y);
+    if (!Number.isFinite(worldX) || !Number.isFinite(worldY)) return null;
+
+    const halfSize = this._state2.isWave
+      ? (this._state2.isMini ? 6 : 9)
+      : (this._state2.isMini ? 18 : 30);
+
+    const previousWorldXRaw = Number(this._player?._lastCollisionWorldX);
+    const previousWorldYRaw = Number(this._player?._lastCollisionWorldY);
+    const previousWorldX = Number.isFinite(previousWorldXRaw) ? previousWorldXRaw : worldX;
+    const previousWorldY = Number.isFinite(previousWorldYRaw)
+      ? previousWorldYRaw
+      : (Number.isFinite(Number(this._state?.lastY)) ? Number(this._state.lastY) : worldY);
+
+    const nearbyObjects = this._level.getNearbySectionObjects?.(worldX) || [];
+    const previousNearbyObjects = previousWorldX !== worldX
+      ? (this._level.getNearbySectionObjects?.(previousWorldX) || [])
+      : [];
+    const portalObjects = [...new Set([...nearbyObjects, ...previousNearbyObjects])];
+
+    let portalMode = null;
+
+    for (const gameObj of portalObjects) {
+      const mode = this._getGamemodePortalMode(gameObj?.type);
+      if (!mode) continue;
+
+      let touching = false;
+
+      if (gameObj.hitbox_radius !== undefined && gameObj.hitbox_radius !== null) {
+        const radius = gameObj.hitbox_radius + halfSize;
+        const dx = worldX - gameObj.x;
+        const dy = worldY - gameObj.y;
+        touching = (dx * dx + dy * dy) <= radius * radius;
+
+        if (!touching && (previousWorldX !== worldX || previousWorldY !== worldY)) {
+          const prevDx = previousWorldX - gameObj.x;
+          const prevDy = previousWorldY - gameObj.y;
+          touching = (prevDx * prevDx + prevDy * prevDy) <= radius * radius;
+
+          if (!touching) {
+            const steps = Math.min(
+              12,
+              Math.max(2, Math.ceil(
+                Math.max(Math.abs(worldX - previousWorldX), Math.abs(worldY - previousWorldY)) / Math.max(1, halfSize)
+              ))
+            );
+
+            for (let i = 1; i < steps; i++) {
+              const t = i / steps;
+              const sampleX = previousWorldX + (worldX - previousWorldX) * t;
+              const sampleY = previousWorldY + (worldY - previousWorldY) * t;
+              const sampleDx = sampleX - gameObj.x;
+              const sampleDy = sampleY - gameObj.y;
+
+              if ((sampleDx * sampleDx + sampleDy * sampleDy) <= radius * radius) {
+                touching = true;
+                break;
+              }
+            }
+          }
+        }
+      } else if (typeof this._player2._isPlayerTouchingPortalHitbox === "function") {
+        touching = this._player2._isPlayerTouchingPortalHitbox(
+          gameObj,
+          worldX,
+          worldY,
+          halfSize,
+          previousWorldX,
+          previousWorldY
+        );
+      }
+
+      if (touching) portalMode = mode;
+    }
+
+    return portalMode;
+  }
+  _copyDualInputFlags(fromState, toState) {
+    if (!fromState || !toState) return;
+    toState.upKeyDown = fromState.upKeyDown;
+    toState.upKeyPressed = fromState.upKeyPressed;
+    toState.queuedHold = fromState.queuedHold;
+    const fromConsumed = !!(fromState._orbActivationConsumedForPress ?? fromState.orbActivationConsumedForPress);
+    toState._orbActivationConsumedForPress = !!fromState.upKeyDown && (!!toState._orbActivationConsumedForPress || fromConsumed);
+  }
+  _shouldSuppressDualGravityAction(state, gravityAlreadySynced) {
+    return !!(gravityAlreadySynced && state && (state.isBall || state.isSpider) && state.upKeyPressed);
+  }
+  _shouldSkipDualBallGravitySync(fromState, toState, options = {}) {
+    if (!fromState?.isBall || !toState) return false;
+    if (options.forceGravitySync) return false;
+    if (options.skipBallInputGravity) return true;
+    return !(toState.onGround || toState.onCeiling || toState.canJump);
+  }
+  _isDualBallOnSurface(state) {
+    return !!(state && (state.onGround || state.onCeiling || state.canJump));
+  }
+  _areDualBallsOverlapping() {
+    if (!this._isDual || !this._state || !this._state2) return false;
+    if (this._state.isDead || this._state2.isDead) return false;
+    if (!this._state.isBall || !this._state2.isBall) return false;
+    const size1 = this._state.isMini ? 18 : 30;
+    const size2 = this._state2.isMini ? 18 : 30;
+    return Math.abs(this._state.y - this._state2.y) < (size1 + size2);
+  }
+  _flipDualBallForOverlap(player, state) {
+    if (!player || !state || !state.isBall) return false;
+    const flipMod = state.gravityFlipped ? -1 : 1;
+    state.yVelocity = flipMod * 22.360064 * (state.isMini ? 0.8 : 1);
+    player.flipGravity(!state.gravityFlipped);
+    state.onGround = false;
+    state.onCeiling = false;
+    state.canJump = false;
+    state.isJumping = false;
+    state.yVelocity *= 0.6;
+    return true;
+  }
+  _resolveDualBallOverlap() {
+    if (!this._areDualBallsOverlapping()) {
+      this._dualBallOverlapResolved = false;
+      return false;
+    }
+    if (this._dualBallOverlapResolved) return false;
+    const primaryOnSurface = this._isDualBallOnSurface(this._state);
+    const secondaryOnSurface = this._isDualBallOnSurface(this._state2);
+    if (!primaryOnSurface && !secondaryOnSurface) return false;
+    
+    let flipped = false;
+    if (primaryOnSurface && !secondaryOnSurface) {
+      flipped = this._flipDualBallForOverlap(this._player2, this._state2);
+    } else if (secondaryOnSurface && !primaryOnSurface) {
+      flipped = this._flipDualBallForOverlap(this._player, this._state);
+    } else if (primaryOnSurface && secondaryOnSurface) {
+      flipped = this._flipDualBallForOverlap(this._player2, this._state2);
+    }
+    if (flipped) this._dualBallOverlapResolved = true;
+    return flipped;
+  }
+  _copyInitialDualModeFlags(fromState, toState) {
+    if (!fromState || !toState) return;
+    toState.isMini = fromState.isMini;
+    toState.mirrored = fromState.mirrored;
+    toState.gravityFlipped = !fromState.gravityFlipped;
+    this._copyDualInputFlags(fromState, toState);
+  }
+  _syncDualGlobalsFromPrimary(options = {}) {
+    if (!this._isDual || !this._state || !this._state2 || this._state2.isDead) return false;
+    let gravitySynced = false;
+    if (!this._shouldSkipDualBallGravitySync(this._state, this._state2, options)) {
+      const nextGravity = !this._state.gravityFlipped;
+      this._state2.gravityFlipped = nextGravity;
+      gravitySynced = true;
+    }
+    this._state2.mirrored = this._state.mirrored;
+    this._ensureDualFlyBounds();
+    return gravitySynced;
+  }
+  _syncDualGlobalsFromSecondary(options = {}) {
+    if (!this._isDual || !this._state || !this._state2 || this._state.isDead || this._state2.isDead) return false;
+    let gravitySynced = false;
+    if (!this._shouldSkipDualBallGravitySync(this._state2, this._state, options)) {
+      const nextGravity = !this._state2.gravityFlipped;
+      this._state.gravityFlipped = nextGravity;
+      gravitySynced = true;
+    }
+    this._state.mirrored = this._state2.mirrored;
+    this._ensureDualFlyBounds();
+    return gravitySynced;
+  }
+  _ensureDualFlyBounds(centerY = null) {
+    if (!this._isDual || !this._level) return;
+    const span = Number(typeof f !== "undefined" ? f : 480) || 480;
+    const floorY = this._level._flyFloorY;
+    const ceilingY = this._level._flyCeilingY;
+    const currentSpan = Number.isFinite(Number(floorY)) && Number.isFinite(Number(ceilingY)) ? Number(ceilingY) - Number(floorY) : null;
+    if (currentSpan === null || Math.abs(currentSpan - span) > 0.01 || !this._level._flyGroundActive) {
+      const y = Number.isFinite(Number(centerY)) ? Number(centerY) : (Number.isFinite(Number(this._state?.y)) ? Number(this._state.y) : 30);
+      this._level.setFlyMode(true, y, span, false);
+    }
+  }
+  _refreshFlyBoundsAfterDual() {
+    if (!this._level) return;
+    if (this._state.isFlying || this._state.isWave || this._state.isUfo) {
+      this._level.setFlyMode(true, this._state.y, f, false);
+    } else if (this._state.isBall) {
+      this._level.setFlyMode(true, this._state.y, f - a * 2, false);
+    } else if (this._state.isSpider) {
+      const spiderBlockSize = typeof a !== "undefined" ? a : 30;
+      const spiderBaseHeight = typeof f !== "undefined" ? f : 480;
+      const spiderFlyHeight = Math.max(spiderBlockSize, spiderBaseHeight - spiderBlockSize);
+      this._level.setFlyMode(true, this._state.y, spiderFlyHeight, false, spiderFlyHeight);
+    } else {
+      this._level.setFlyMode(false, 0);
+    }
+  }
+  _killDualPlayers() {
+    if (this._state && !this._state.isDead) this._player.killPlayer();
+    if (this._isDual && this._state2 && !this._state2.isDead) this._player2.killPlayer();
+  }
+
   _getMirrorXOffset(xOffset) {
     return this._state.mirrored ? screenWidth - xOffset : xOffset;
   }
   _enableDualMode() {
     if (this._isDual) return;
     this._isDual = true;
+    this._dualBallOverlapResolved = false;
     this._state2.reset();
-    this._state2.y = this._state.y;
-    this._state2.yVelocity = 0;
-    this._state2.onGround = false;
-    this._state2.gravityFlipped = !this._state.gravityFlipped;
-    this._state2.isMini = this._state.isMini;
-    this._state2.mirrored = this._state.mirrored;
     this._state2.isDead = false;
+    this._state2.yVelocity = this._state.yVelocity;
+    this._copyInitialDualModeFlags(this._state, this._state2);
+    this._ensureDualFlyBounds(this._state.y);
+    const primaryY = Number.isFinite(Number(this._state.y)) ? Number(this._state.y) : 30;
+    this._state2.y = primaryY;
+    this._state2.lastY = primaryY;
+    this._state2.lastGroundPosY = primaryY;
+    this._state2.onGround = false;
+    this._state2.onCeiling = false;
+    this._state2.canJump = false;
+    this._state2.isJumping = false;
     this._player2.reset();
-    if (this._state.isFlying) {
-      this._player2.enterShipMode();
-    } else if (this._state.isBall) {
-      this._player2.enterBallMode();
-    } else if (this._state.isWave) {
-      this._player2.enterWaveMode();
-    } else if (this._state.isUfo) {
-      this._player2.enterUfoMode();
-    } else if (this._state.isRobot) {
-      this._player2.enterRobotMode();
-    } else if (this._state.isSpider) {
-      this._player2.enterSpiderMode();
-    } else {
-      this._player2.setCubeVisible(true);
-    }
-    this._state2.gravityFlipped = !this._state.gravityFlipped;
+    this._player2.setInvertedColors?.(true);
+    this._setPlayerGamemode(this._player2, this._state2, this._getDualModeId(this._state), true);
+    this._copyInitialDualModeFlags(this._state, this._state2);
+    const initialPortalMode = this._getInitialDualPortalMode();
+    if (initialPortalMode) this._setPlayerGamemode(this._player2, this._state2, initialPortalMode, true);
+    this._ensureDualFlyBounds(this._state.y);
+    if (this._player2 && this._player2._hitboxTrail) this._player2._hitboxTrail = [];
+    if (this._player2?._hitboxGraphics) this._player2._hitboxGraphics.clear();
   }
   _disableDualMode() {
     if (!this._isDual) return;
     this._isDual = false;
+    this._dualBallOverlapResolved = false;
     this._state2.isDead = true;
+    this._state2.upKeyDown = false;
+    this._state2.upKeyPressed = false;
+    this._state2.queuedHold = false;
     this._player2.setCubeVisible(false);
     this._player2.setShipVisible(false);
     this._player2.setBallVisible(false);
     this._player2.setWaveVisible(false);
+    this._player2.setBirdVisible?.(false);
     this._player2.setRobotVisible(false);
+    this._player2.setSpiderVisible(false);
+    if (this._player2?._hitboxGraphics) this._player2._hitboxGraphics.clear();
+    if (this._player2 && this._player2._hitboxTrail) this._player2._hitboxTrail = [];
+    this._refreshFlyBoundsAfterDual();
   }
   _showNewBest() {
     let _0x9f2437 = screenWidth / 2;
@@ -7081,6 +7641,9 @@ _applyMirrorEffect() {
   }
 
     _triggerEndPortal() {
+    if (this._isDual && this._player2 && this._state2 && !this._state2.isDead) {
+      this._player2.playEndAnimation(this._level.endXPos, () => {}, this._endPortalGameY);
+    }
     this._player.playEndAnimation(this._level.endXPos, () => this._levelComplete(), this._endPortalGameY);
   }
   _levelComplete() {

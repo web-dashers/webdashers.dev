@@ -3575,8 +3575,14 @@ window.LevelObject = class LevelObject {
         continue;
       }
       _0x3d473e.activated = false;
+      if (_0x3d473e._activatedByPlayer) {
+        delete _0x3d473e._activatedByPlayer;
+      }
       if (_0x3d473e._dashHoldTicks !== undefined) {
         _0x3d473e._dashHoldTicks = 0;
+      }
+      if (_0x3d473e._dashHoldTicksByPlayer) {
+        delete _0x3d473e._dashHoldTicksByPlayer;
       }
     }
     for (let _0x5c5d9a of this._audioScaleSprites) {
