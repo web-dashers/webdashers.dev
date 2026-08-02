@@ -29,8 +29,37 @@ class Collider {
     if (this.slopeFlipY) angleDeg = -angleDeg;
     return angleDeg * Math.PI / 180;
   }
+  usesFloorLanding(gravityFlipped) {
+    return this.isSolidBelowSurface(gravityFlipped);
+  }
+  isSolidBelowSurface(gravityFlipped) {
+    return this.slopeFlipY === gravityFlipped;
+  }
+  isSlopeSolidAt(worldX, worldY, gravityFlipped = false) {
+    if (this.type !== slopeType) return false;
+    const halfW = this.w / 2;
+    const halfH = this.h / 2;
+    const left = this.x - halfW;
+    const right = this.x + halfW;
+    const bboxBottom = this.y - halfH;
+    const bboxTop = this.y + halfH;
+    if (worldX < left || worldX > right || worldY < bboxBottom || worldY > bboxTop) {
+      return false;
+    }
+    if (this.slopeIsFilled) {
+      return true;
+    }
+    const surfaceY = this.getSlopeSurfaceY(worldX);
+    if (surfaceY === null) return false;
+    return this.isSolidBelowSurface(gravityFlipped) ? worldY < surfaceY : worldY > surfaceY;
+  }
+  getSlopeBackWallSide(gravityFlipped = false) {
+    let leftWall = this.slopeDir > 0;
+    if (!this.isSolidBelowSurface(gravityFlipped)) leftWall = !leftWall;
+    return leftWall ? "left" : "right";
+  }
 }
-
+ 
 function _decodeTextObjectString(value) {
   if (value === undefined || value === null) return "";
   const raw = String(value);
@@ -47,14 +76,14 @@ function _decodeTextObjectString(value) {
     return raw;
   }
 }
-
+ 
 function _encodeTextObjectString(value) {
   const bytes = new TextEncoder().encode(String(value ?? ""));
   let binary = "";
   for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
-
+ 
 function parseObject(objectString) {
   let objectParts = objectString.split(",");
   let objectData = {};
@@ -94,7 +123,6 @@ function parseObject(objectString) {
       color1: parseInt(objectData[21] || "0", 10),
       color2: parseInt(objectData[22] || "0", 10),
       text: _decodeTextObjectString(objectData[31] ?? objectData["31"] ?? ""),
-      // Following are for startpos
       gameMode: parseInt(objectData['kA2'] ?? '0', 10),
       miniMode: parseInt(objectData['kA3'] ?? '0', 10),
       speed: parseInt(objectData['kA4'] ?? '0', 10),
@@ -138,26 +166,26 @@ function parseLevel(levelString) {
     settings: settings,
     objects: objects
   };
-
+ 
 }
 function getBackgroundTextureIndex(backgroundSetting) {
   const parsedBackgroundId = parseInt(String(backgroundSetting ?? "1"), 10);
   const gdBackgroundId = isNaN(parsedBackgroundId) || parsedBackgroundId <= 1 ? 1 : parsedBackgroundId;
   return gdBackgroundId - 1;
 }
-
+ 
 function getBackgroundDisplayId(backgroundSetting) {
   const parsedBackgroundId = parseInt(String(backgroundSetting ?? "1"), 10);
   const gdBackgroundId = isNaN(parsedBackgroundId) || parsedBackgroundId <= 1 ? 1 : parsedBackgroundId;
   return String(gdBackgroundId).padStart(2, "0");
 }
-
+ 
 function getGroundTextureId(groundSetting) {
   const parsedGroundId = parseInt(String(groundSetting ?? "1"), 10);
   const textureIndex = isNaN(parsedGroundId) || parsedGroundId <= 1 ? 0 : parsedGroundId - 1;
   return String(textureIndex).padStart(2, "0");
 }
-
+ 
 const solidType = "solid";
 const hazardType = "hazard";
 const decoType = "deco";
@@ -168,9 +196,8 @@ const ringType = "ring";
 const triggerType = "trigger";
 const speedType = "speed";
 const slopeType = "slope";
-// ── Slope ID registry ──
 const _SLOPE_DATA = {
-  289:{gw:1,gh:1,angle:45,sq:false},291:{gw:2,gh:1,angle:22.5,sq:false},
+  289:{gw:1,gh:1,angle:45,sq:false,dir:1}, 291:{gw:2,gh:1,angle:22.5,sq:false,dir:-1},
   294:{gw:1,gh:1,angle:45,sq:false},295:{gw:2,gh:1,angle:22.5,sq:false},
   296:{gw:0.367,gh:0.433,angle:45,sq:true},297:{gw:0.967,gh:0.45,angle:45,sq:true},
   299:{gw:1,gh:1,angle:45,sq:false},301:{gw:2,gh:1,angle:22.5,sq:false},
@@ -277,6 +304,66 @@ const _SLOPE_DATA = {
   1901:{gw:0.367,gh:0.433,angle:45,sq:true},1902:{gw:0.967,gh:0.45,angle:45,sq:true},
   1906:{gw:1,gh:1,angle:45,sq:false},1907:{gw:2,gh:1,angle:22.5,sq:false},
 };
+ 
+function _resolveSlopeDir(objectDef, flipX, objId) {
+  const frames = [];
+  if (objectDef) {
+    if (objectDef.frame) frames.push(objectDef.frame);
+    if (objectDef.children) {
+      for (const child of objectDef.children) {
+        if (child.frame) frames.push(child.frame);
+      }
+    }
+  }
+  const text = frames.join(" ");
+  let dir = 1;
+
+  /*
+  if (/slope_02[^0-9]|slope_04|slope_06|slope_02[bcd]_|pit_0[14]_slope_02|plank_01_slope_02|slope_square_02|slope_square_04|slope_square_05/.test(text)) {
+    dir = -1;
+  }
+  */
+  
+  if (flipX) dir = -dir;
+  return dir;
+}
+ 
+function _resolveSlopeOrientation(objectDef, levelObj) {
+  let dir = _resolveSlopeDir(objectDef, levelObj.flipX, levelObj.id);
+  let flipY = !!levelObj.flipY;
+  const rot90 = Math.round((((levelObj.rot || 0) % 360) + 360) % 360 / 90) % 4;
+  if (rot90 === 1) {
+    const nextDir = flipY ? 1 : -1;
+    flipY = dir < 0;
+    dir = nextDir;
+  } else if (rot90 === 2) {
+    dir = -dir;
+    flipY = !flipY;
+  } else if (rot90 === 3) {
+    const nextDir = flipY ? -1 : 1;
+    flipY = !(dir < 0);
+    dir = nextDir;
+  }
+  return { dir, flipY };
+}
+ 
+function _createSlopeCollider(levelObj, objectDef, worldX, worldY) {
+  const slopeData = _SLOPE_DATA[levelObj.id];
+  if (!slopeData) return null;
+  const rot90 = Math.round((((levelObj.rot || 0) % 360) + 360) % 360 / 90) % 4;
+  const steep = rot90 === 1 || rot90 === 3;
+  const w = (steep ? slopeData.gh : slopeData.gw) * a;
+  const h = (steep ? slopeData.gw : slopeData.gh) * a;
+  const collider = new Collider(slopeType, worldX, worldY, w, h, 0);
+  collider.objid = levelObj.id;
+  collider.slopeAngleDeg = steep ? (90 - slopeData.angle) : slopeData.angle;
+  const { dir, flipY } = _resolveSlopeOrientation(objectDef, levelObj);
+  collider.slopeDir = dir;
+  collider.slopeFlipY = flipY;
+  collider.slopeIsFilled = slopeData.sq;
+  return collider;
+}
+
 const flyPortal = "fly";
 const cubePortal = "cube";
 const portalWaveType = "portal_wave";
@@ -1975,10 +2062,29 @@ window.LevelObject = class LevelObject {
         const childSprite = addImageToScene(scene, spriteWorldX + childDx, baseY + childDy, childDef.frame);
 
         if (childSprite) {
-          const childObjectData = (childDef.frame === "portal_01_extra_2_001.png" || childDef.frame === "portal_02_extra_2_001.png")
-            ? { ...levelObj, rot: 0 }
-            : levelObj;
+          const flipX = !!levelObj.flipX;
+          const flipY = !!levelObj.flipY;
+          let childrotated = (levelObj.rot || 0) + (childDef.rot || 0);
+
+          if (flipX !== flipY) {
+            childrotated = (levelObj.rot || 0) - (childDef.rot || 0);
+          }
+
+          if (childDef.frame === "portal_01_extra_2_001.png" || childDef.frame === "portal_02_extra_2_001.png") {
+            childrotated = 0;
+          } 
+          else if (childDef.frame === "blockOutline_14new_001.png" || childDef.frame === "blockOutline_15new_001.png") {
+            let childRotOffset = 0;
+            if (childDef.frame === "blockOutline_14new_001.png") childRotOffset = -45;
+            else if (childDef.frame === "blockOutline_15new_001.png") childRotOffset = -26.565;
+            if (flipX) childRotOffset = -childRotOffset;
+            if (flipY) childRotOffset = -childRotOffset;
+            childrotated += childRotOffset;
+          }
+
+          const childObjectData = { ...levelObj, rot: childrotated };
           this._applyVisualProps(scene, childSprite, childDef.frame, childObjectData, childDef);
+          
           const showguide = childDef.portalGuide ? (window.enablePortalGuide !== false) : true;
           const showguide2 = childDef.orbGuide ? (window.enableOrbGuide !== false) : true;
           childSprite.setVisible(showguide && showguide2);
@@ -1992,7 +2098,7 @@ window.LevelObject = class LevelObject {
             this._audioScaleSprites.push(childSprite);
           }
 
-           const bortalstuff = childDef.portalGuide ? { ...childDef, _portalFront: true } : childDef;
+          const bortalstuff = childDef.portalGuide ? { ...childDef, _portalFront: true } : childDef;
           if ((childDef.z !== undefined ? childDef.z : -1) < 0) {
             childSprite._eeLayer = 1;
             childSprite._eeBehindParent = true;
@@ -2023,7 +2129,7 @@ window.LevelObject = class LevelObject {
 
             const childMirror = addImageToScene(scene, spriteWorldX + childDx, baseY + childDy, childDef.frame);
             if (childMirror) {
-              this._applyVisualProps(scene, childMirror, childDef.frame, levelObj, childDef);
+              this._applyVisualProps(scene, childMirror, childDef.frame, childObjectData, childDef);
               childMirror.setTint(0x000000);
               childMirror.rotation = childSprite.rotation + Math.PI;
               childMirror._isSaw = true;
@@ -2137,7 +2243,13 @@ window.LevelObject = class LevelObject {
       }
     };
 
-    if (objectDef.type === solidType && objectDef.gridW > 0 && objectDef.gridH > 0) {
+    const slopeCollider = _createSlopeCollider(levelObj, objectDef, worldX, worldY);
+    if (slopeCollider) {
+      registerCollider(slopeCollider);
+      this.objects.push(slopeCollider);
+      hasCollisionEntry = true;
+      this._addCollisionToSection(slopeCollider);
+    } else if (objectDef.type === solidType && objectDef.gridW > 0 && objectDef.gridH > 0) {
       const w = objectDef.gridW * a;
       const h = objectDef.gridH * a;
       const collider = new Collider(solidType, worldX, worldY, w, h, levelObj.rot || 0);

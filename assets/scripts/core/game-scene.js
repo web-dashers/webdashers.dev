@@ -41,6 +41,10 @@ class PracticeMode {
       mirrored: playerState.mirrored,
       isDashing: playerState.isDashing,
       dashYVelocity: playerState.dashYVelocity,
+      ballShouldRotate: playerState.ballShouldRotate,
+      ballRotateOpposite: playerState.ballRotateOpposite,
+      ballNormalRotate: playerState.ballNormalRotate,
+      ballHitPad: playerState.ballHitPad,
       robotHold: !!playerState._robotHold,
       robotHoldTimer: playerState._robotHoldTimer || 0,
       cameraX: cameraX,
@@ -426,7 +430,7 @@ class GameScene extends Phaser.Scene {
     this._player.setCubeVisible(false);
     this._player.setShipVisible(false);
     this._player.setBallVisible(false);
-    this._logo = this.add.image(0, 100, "GJ_WebSheet", "GJ_logo_001.png").setScrollFactor(0).setDepth(30);
+    this._logo = this.add.image(0, 100, "GJ_WebSheet", "GJ_logo_001.png").setScrollFactor(0).setDepth(30).setScale(1.2);
     this._robLogo = this.add.image(110, 595, "GJ_WebSheet", "RobTopLogoBig_001.png").setScrollFactor(0).setDepth(30).setScale(0.525).setInteractive();
     this._makeBouncyButton(this._robLogo, 0.525, () => {
       window.open("https://geometrydash.com", "_blank");
@@ -481,7 +485,7 @@ class GameScene extends Phaser.Scene {
       color: "#ffffff",
       fontFamily: "Arial"
     }).setOrigin(1, 1).setScrollFactor(0).setDepth(30).setAlpha(0.3);
-    this._tryMeImg = this.add.image(0, 182.5, "GJ_WebSheet", "tryMe_001.png").setScrollFactor(0).setDepth(30);
+    this._tryMeImg = this.add.image(0, 150, "GJ_MenuBeta").setScrollFactor(0).setDepth(30).setScale(0.75);
     this._downloadBtns = [];
     const _0x4fc67f = [{
       key: "downloadSteam_001",
@@ -3893,18 +3897,19 @@ this._menuUpdateLogBtn = this.add.image(screenWidth - 30 - 50, 33, "GJ_WebSheet"
     const arrowL = this.add.image(55, cy - 25, "GJ_GameSheet03", "navArrowBtn_001.png").setScrollFactor(0).setDepth(154).setScale(1.1).setFlipX(true).setInteractive();
     const arrowR = this.add.image(sw - 55, cy - 25, "GJ_GameSheet03", "navArrowBtn_001.png").setScrollFactor(0).setDepth(154).setScale(1.1).setFlipX(false).setInteractive();
     const allLevels = window.allLevels || [];
-    const pageCount = allLevels.length + 1;
-    let currentPageIndex = allLevels.findIndex(l => l[2] === window.currentlevel[2]);
+    const visibleLevels = allLevels.filter(level => !(level && level[2] === "level_22"));
+    const pageCount = visibleLevels.length + 1;
+    let currentPageIndex = visibleLevels.findIndex(l => l[2] === window.currentlevel[2]);
     if (currentPageIndex < 0) currentPageIndex = 0;
-    const isComingSoonPage = () => currentPageIndex >= allLevels.length;
+    const isComingSoonPage = () => currentPageIndex >= visibleLevels.length;
     const getPageLevel = () => {
-      if (isComingSoonPage()) return allLevels[allLevels.length - 1] || window.currentlevel || [];
-      return allLevels[currentPageIndex] || window.currentlevel || [];
+      if (isComingSoonPage()) return visibleLevels[visibleLevels.length - 1] || window.currentlevel || [];
+      return visibleLevels[currentPageIndex] || window.currentlevel || [];
     };
     const applyCurrentPage = () => {
       this._levelSelectIsComingSoonPage = isComingSoonPage();
-      if (!isComingSoonPage() && allLevels[currentPageIndex]) {
-        window.currentlevel = [...allLevels[currentPageIndex]];
+      if (!isComingSoonPage() && visibleLevels[currentPageIndex]) {
+        window.currentlevel = [...visibleLevels[currentPageIndex]];
       }
     };
     applyCurrentPage();
@@ -5248,8 +5253,8 @@ _buildSettingsPopup() {
       });
 
       const importBtn = this.add.image(centerX - 300, centerY + 20,"importMacro").setInteractive();
-      const exportBtn = this.add.image(centerX - 150, centerY + 20, "GJ_GameSheet03", "GJ_shareBtn_001.png").setInteractive().setFlipY(true).setAngle(90).setScale(0.53);
-      const createBtn = this.add.image(centerX, centerY + 20, "GJ_GameSheet03", "GJ_plusBtn_001.png").setInteractive().setFlipY(true).setAngle(90).setScale(1.2);
+      const exportBtn = this.add.image(centerX - 150, centerY + 20, "GJ_GameSheet03", "GJ_shareBtn_001.png").setInteractive().setScale(0.53);
+      const createBtn = this.add.image(centerX, centerY + 20, "GJ_GameSheet03", "GJ_plusBtn_001.png").setInteractive().setScale(1.2);
       const playbackBtn = this.add.image(centerX + 150, centerY + 20, this._macroBot?.playing ? "stopPlayback" : "playbackMacro").setInteractive().setScale(0.25);
       const recordBtn = this.add.image(centerX + 300, centerY + 20, this._macroBot?.recording ? "stopRecord" : "recordMacro").setInteractive().setScale(0.25);
 
@@ -5412,7 +5417,7 @@ _buildSettingsPopup() {
       { text: "bog, Lasokar, AntiMatter,", scale: 0.7, font: "goldFont" },
       { text: "arbstro, and aloaf", scale: 0.7, font: "goldFont" },
       { text: "Contributors:", scale: 0.9, font: "bigFont" },
-      { text: "t0nchi7 and Itzar.", scale: 0.7, font: "goldFont" },
+      { text: "t0nchi7, Itzar and CoraBitz", scale: 0.7, font: "goldFont" },
       { text: "© 2026 RobTop Games. All rights reserved.", scale: 0.4, font: "Arial", color: 0x000000 },
     ]; 
     let yPos = 0;
@@ -5826,19 +5831,20 @@ _buildSettingsPopup() {
       0xff6666
       0xff9944
       0xaaddff - fun messages from me :)
-      0xff00ff - pink dev entries
+      0xFF008E - pink dev entries
     */
     const updateEntries = [
       { text: "Update Log", scale: 0.85, font: "goldFont" },
-      { text: "- TELEPORT PORTALS!!!", scale: 0.7 },
-      { text: "- Fixed rotate triggers", scale: 0.7 },
-      { text: "- Fixed move trigger unit cap", scale: 0.7 },
-      { text: "- Fixed G2 not rendering", scale: 0.7 },
-      { text: "- Fingerdash is beatable now", scale: 0.7 },
-      { text: "- Fixed spider/robot portals", scale: 0.7 },
-      { text: "- Fix wave trail (credit 2 pinkdev)", scale: 0.7 },
-      { text: "There's probably more but I forgot", color: 0x808080, scale: 0.5 },
-      { text: "- Lasokar", scale: 0.7, color: 0x00e676 },
+      { text: "slopes (very buggy)", scale: 0.7, color: 0xff9944 },
+      { text: "THEY WILL BE FIXED", scale: 0.7, },
+      { text: "OVER TIME", scale: 0.7, },
+      { text: "slopes work in imported", scale: 0.7, },
+      { text: "levels now (thanks lasokadadyy)", scale: 0.7, },
+      { text: "fixed SOME objects", scale: 0.7 },
+      { text: "-pinkdih", scale: 0.7, color: 0xFF008E },
+      { text: "fixed a lot more objects", scale: 0.55 },
+      { text: "reworked the ball's rolling physics", scale: 0.55 },
+      { text: "particles soon", scale: 0.55, color: 0x708090},
     ]; 
     let yPos = 0;
     const lineItems = [];
@@ -6653,7 +6659,7 @@ _buildSettingsPopup() {
       this._copyrightText.x = screenWidth - 20;
     }
     if (this._tryMeImg) {
-      this._tryMeImg.x = _0x1e5db8 + 175;
+      this._tryMeImg.x = _0x1e5db8 + 260;
     }
     if (this._menuGlitter) {
       this._menuGlitter.x = _0x1e5db8;
@@ -6893,6 +6899,7 @@ _buildSettingsPopup() {
       this._macroBot?.clearPlayback();
     }
     this._level._updateGlowVisibility?.();
+    this._updateCameraY(0, true);
   }
   _getSongOffsetForWorldX(worldX) {
     const startX = Number.isFinite(Number(worldX)) ? Number(worldX) : 0;
@@ -6926,6 +6933,7 @@ _buildSettingsPopup() {
     this._slideIn = false;
     this._playerWorldX = checkpoint.x;
     this._cameraX = checkpoint.cameraX;
+    this._cameraY = checkpoint.cameraY;
     this._cameraXRef._v = this._cameraX;
     this._state.y = checkpoint.y;
     this._state.yVelocity = checkpoint.yVelocity;
@@ -6953,6 +6961,10 @@ _buildSettingsPopup() {
     this._state.mirrored = checkpoint.mirrored;
     this._state.isDashing = checkpoint.isDashing;
     this._state.dashYVelocity = checkpoint.dashYVelocity;
+    this._state.ballShouldRotate = checkpoint.ballShouldRotate || false;
+    this._state.ballRotateOpposite = checkpoint.ballRotateOpposite || false;
+    this._state.ballNormalRotate = checkpoint.ballNormalRotate || 1;
+    this._state.ballHitPad = checkpoint.ballHitPad || false;
     this._state._robotHold = !!checkpoint.robotHold;
     this._state._robotHoldTimer = checkpoint.robotHoldTimer || 0;
     this._player.reset();
@@ -7109,6 +7121,7 @@ _buildSettingsPopup() {
     }
     if (this._player2?._hitboxGraphics) this._player2._hitboxGraphics.clear();
 
+    this._deltaBuffer = 0;
     this._physicsFrame = checkpoint.physicsFrame;
     if (this._macroBot?.recording == true){
       this._macroBot?.rollbackRecording(this._physicsFrame);
@@ -7219,7 +7232,7 @@ _buildSettingsPopup() {
     }
     this._bg.tilePositionY = tileY;
   }
-  _updateCameraY(_0xc7c517) {
+  _updateCameraY(_0xc7c517, snap = false) {
     let explosionPiece = this._cameraY;
     let _0x1a27be = explosionPiece;
     if (this._level.flyCameraTarget !== null) {
@@ -7228,25 +7241,27 @@ _buildSettingsPopup() {
       let _0x2bc8fb = this._state.y;
       let _0x259956 = 140;
       let _0x5025ec = 80;
-      let _0x1f7976 = explosionPiece - o + 320;
+      let _0x1f7976 = explosionPiece - (typeof o !== 'undefined' ? o : 0) + 320;
       if (this._state.gravityFlipped) {
         if (_0x2bc8fb > _0x1f7976 + _0x5025ec) {
-          _0x1a27be = _0x2bc8fb - 320 - _0x5025ec + o;
+          _0x1a27be = _0x2bc8fb - 320 - _0x5025ec + (typeof o !== 'undefined' ? o : 0);
         } else if (_0x2bc8fb < _0x1f7976 - _0x259956) {
-          _0x1a27be = _0x2bc8fb - 320 + _0x259956 + o;
+          _0x1a27be = _0x2bc8fb - 320 + _0x259956 + (typeof o !== 'undefined' ? o : 0);
         }
       } else {
         if (_0x2bc8fb > _0x1f7976 + _0x259956) {
-          _0x1a27be = _0x2bc8fb - 320 - _0x259956 + o;
+          _0x1a27be = _0x2bc8fb - 320 - _0x259956 + (typeof o !== 'undefined' ? o : 0);
         } else if (_0x2bc8fb < _0x1f7976 - _0x5025ec) {
-          _0x1a27be = _0x2bc8fb - 320 + _0x5025ec + o;
+          _0x1a27be = _0x2bc8fb - 320 + _0x5025ec + (typeof o !== 'undefined' ? o : 0);
         }
       }
     }
     if (_0x1a27be < 0) {
       _0x1a27be = 0;
     }
-    if (_0xc7c517 !== 0) {
+    if (snap) {
+      this._cameraY = _0x1a27be;
+    } else if (_0xc7c517 !== 0) {
       explosionPiece += (_0x1a27be - explosionPiece) / (10 / _0xc7c517);
       if (explosionPiece < 0) {
         explosionPiece = 0;
@@ -7554,7 +7569,7 @@ _buildSettingsPopup() {
     }
     if (this._state.isDead) {
       if (!this._deathSoundPlayed) {
-        if (!this._practicedMode.practiceMode) {
+        if (!this._audio._shouldUsePracticeSong()) {
           this._audio.stopMusic();
         }
         this._audio.playEffect("explode_11", {
@@ -7734,6 +7749,9 @@ _buildSettingsPopup() {
         const _secondaryBallInputGravity = this._state2.isBall && this._state2.upKeyPressed;
         const _secondarySpiderInputGravity = this._state2.isSpider && this._state2.upKeyPressed;
         this._player2.updateJump(verticalDelta);
+        if (!this._state2.upKeyPressed) this._state.upKeyPressed = false;
+        if (!this._state2.queuedHold) this._state.queuedHold = false;
+        if (this._state2._orbActivationConsumedForPress) this._state._orbActivationConsumedForPress = true;
         this._state2.y += this._state2.yVelocity * verticalDelta;
         this._player2.checkCollisions(this._playerWorldX - centerX - horizontalDelta);
         if (this._isDual && !this._state2.isDead && this._getDualSharedSignature(this._state2) !== _secondarySharedBefore) {

@@ -54,17 +54,16 @@ class LevelEditor {
 
     const camSpeed = 15;
     const cursors = this.input.keyboard.createCursorKeys();
-    const wasd = this.input.keyboard.addKeys('W,A,S,D');
 
-    if (cursors.left.isDown || wasd.A.isDown) {
+    if (cursors.left.isDown) {
         this._cameraX -= camSpeed;
-    } else if (cursors.right.isDown || wasd.D.isDown) {
+    } else if (cursors.right.isDown) {
         this._cameraX += camSpeed;
     }
 
-    if (cursors.up.isDown || wasd.W.isDown) {
+    if (cursors.up.isDown) {
         this._cameraY -= camSpeed;
-    } else if (cursors.down.isDown || wasd.S.isDown) {
+    } else if (cursors.down.isDown) {
         this._cameraY += camSpeed;
     }
 
@@ -157,9 +156,56 @@ class LevelEditor {
         this._isDragging = false;
         this._isDraggingSlider = false;
     });
+
+    this.input.keyboard.on('keydown-ONE', () => {
+        if (this._editorTextInputFocused) return;
+        this._setEditorTab("build");
+    });
+    this.input.keyboard.on('keydown-TWO', () => {
+        if (this._editorTextInputFocused) return;
+        this._setEditorTab("edit");
+    });
+    this.input.keyboard.on('keydown-THREE', () => {
+        if (this._editorTextInputFocused) return;
+        this._setEditorTab("delete");
+    });
+
+    const moveSelectedObjectsWithKey = (dx, dy) => {
+        if (this._editorTextInputFocused || this._editorPlaytestActive || this._editorPlaytestPaused) return;
+        this._moveObject(dx, dy);
+    };
+
+    this.input.keyboard.on('keydown-W', (event) => {
+        event?.preventDefault?.();
+        const amount = event.shiftKey ? 1 : 60;
+        moveSelectedObjectsWithKey(0, -amount);
+    });
+    this.input.keyboard.on('keydown-A', (event) => {
+        event?.preventDefault?.();
+        const amount = event.shiftKey ? 1 : 60;
+        moveSelectedObjectsWithKey(-amount, 0);
+    });
+    this.input.keyboard.on('keydown-S', (event) => {
+        event?.preventDefault?.();
+        const amount = event.shiftKey ? 1 : 60;
+        moveSelectedObjectsWithKey(0, amount);
+    });
+    this.input.keyboard.on('keydown-D', (event) => {
+        event?.preventDefault?.();
+        const amount = event.shiftKey ? 1 : 60;
+        moveSelectedObjectsWithKey(amount, 0);
+    });
+
     this._createEditorGui();
   }
 
+  _setEditorTab(tabId) {
+    if (!tabId || this._editorTab === tabId) return;
+    this._editorTab = tabId;
+    this._editorPage = 0;
+    this._updateTabVisuals();
+    this._buildObjectGrid();
+  }
 
   _createEditorGui() {
     const centerX = screenWidth / 2;
@@ -231,10 +277,7 @@ class LevelEditor {
         this._toolbox.add(btn);
         this._tabButtons[tab.id] = btn;
         this._makeBouncyButton(btn, 1, () => {
-            this._editorTab = tab.id;
-            this._editorPage = 0;
-            this._updateTabVisuals();
-            this._buildObjectGrid();
+            this._setEditorTab(tab.id);
         });
     });
 
@@ -1300,6 +1343,9 @@ class LevelEditor {
                 const secondaryBallInputGravity = this._state2.isBall && this._state2.upKeyPressed;
                 const secondarySpiderInputGravity = this._state2.isSpider && this._state2.upKeyPressed;
                 this._player2.updateJump(verticalDelta);
+                if (!this._state2.upKeyPressed) this._state.upKeyPressed = false;
+                if (!this._state2.queuedHold) this._state.queuedHold = false;
+                if (this._state2._orbActivationConsumedForPress) this._state._orbActivationConsumedForPress = true;
                 this._state2.y += this._state2.yVelocity * verticalDelta;
                 this._player2.checkCollisions(this._playerWorldX - centerX - horizontalDelta);
                 if (this._isDual && !this._state2.isDead && secondarySharedBefore !== undefined && this._getDualSharedSignature?.(this._state2) !== secondarySharedBefore) {
@@ -8715,6 +8761,7 @@ LevelEditor.methodNames = [
   "_updateEditorPlaytestInput",
   "_updateEditorPlaytest",
   "_adjustZoom",
+  "_setEditorTab",
   "_updateTabVisuals",
   "_getSheetForFrameThingy",
   "_getTextureRefForFrameThingy",
