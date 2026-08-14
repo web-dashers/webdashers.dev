@@ -1,3 +1,62 @@
+window.SongDB = {
+  db: null,
+  init: function() {
+    return new Promise((resolve, reject) => {
+      if (this.db) return resolve();
+      const req = indexedDB.open("GDSongDB", 1);
+      req.onupgradeneeded = e => {
+        e.target.result.createObjectStore("songs");
+      };
+      req.onsuccess = e => {
+        this.db = e.target.result;
+        resolve();
+      };
+      req.onerror = () => reject(req.error);
+    });
+  },
+  save: async function(id, arrayBuffer) {
+    await this.init();
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction("songs", "readwrite");
+      const store = tx.objectStore("songs");
+      store.put(arrayBuffer, String(id));
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+  },
+  load: async function(id) {
+    await this.init();
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction("songs", "readonly");
+      const store = tx.objectStore("songs");
+      const req = store.get(String(id));
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  },
+  delete: async function(id) {
+    await this.init();
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction("songs", "readwrite");
+      const store = tx.objectStore("songs");
+      const req = store.delete(String(id));
+      req.onsuccess = resolve;
+      req.onerror = () => reject(req.error);
+    });
+  },
+  isDownloaded: async function(id) {
+    await this.init();
+    return new Promise((resolve) => {
+      const tx = this.db.transaction("songs", "readonly");
+      const store = tx.objectStore("songs");
+      const req = store.count(String(id));
+      req.onsuccess = () => resolve(req.result > 0);
+      req.onerror = () => resolve(false);
+    });
+  }
+};
+window.SongDB.init().catch(console.warn);
+
 class AudioManager {
   constructor(scene) {
     this._scene = scene;
@@ -30,7 +89,7 @@ class AudioManager {
     return Number.isFinite(parsedOffset) ? parsedOffset : 0;
   }
   _shouldUsePracticeSong() {
-    return !!(this._scene?._practicedMode?.practiceMode && !window.practiceMusicBypass);
+    return !!(this._scene?._practicedMode?.practiceMode && !window.practiceMusicSync);
   }
   _getOfficialSongAudioPath(songKey = window.currentlevel?.[0]) {
     if (!songKey || !Array.isArray(window.allLevels)) return null;
@@ -110,7 +169,7 @@ class AudioManager {
       return false;
     }
   }
-  _loadMissingOnlineSong(songKey, startPosOffset = 0, fadeDuration = null) {
+  async _loadMissingOnlineSong(songKey, startPosOffset = 0, fadeDuration = null) {
     const match = String(songKey || "").match(/^ng_song_(\d+)$/);
     const songId = match ? match[1] : null;
     const soundMgr = this._scene?.game?.sound;
@@ -148,17 +207,13 @@ class AudioManager {
         const ngMap = {};
         for (let i = 0; i + 1 < ngParts.length; i += 2) ngMap[ngParts[i]] = ngParts[i + 1];
 
-        const songUrl = decodeURIComponent((ngMap["10"] || "").trim());
-        if (!songUrl) throw new Error("Song URL unavailable");
-
         const songTitle = (ngMap["2"] || `Song #${songId}`).replace(/:$/, "").trim();
         const songArtist = (ngMap["4"] || "Unknown").replace(/:$/, "").trim();
-        const proxiedUrl = (typeof window.getGdAudioUrl === "function" ? window.getGdAudioUrl(songUrl) : songUrl);
-        const audioRes = await window.fetchGdAudio(songUrl);
-        if (!audioRes.ok) throw new Error(`Audio proxy failed: ${audioRes.status}`);
-
-        const arrayBuf = await audioRes.arrayBuffer();
-        const decoded = await ctx.decodeAudioData(arrayBuf);
+        
+        const arrayBuf = await window.SongDB.load(songId);
+        if (!arrayBuf) throw new Error("Song not downloaded manually");
+        
+        const decoded = await ctx.decodeAudioData(arrayBuf.slice(0));
 
         if (this._pendingOnlineSongLoadKey !== songKey) return;
 
@@ -468,7 +523,7 @@ class AudioManager {
     }
   }
   _ensureCorrectMusicMode() {
-    if (this._scene?._practiceMusicBypassChangePendingUntilRestart) return;
+    if (this._scene?._practiceMusicSyncChangePendingUntilRestart) return;
     if (this._pendingMusicLoadKey || this._pendingOnlineSongLoadKey) return;
     if (!this._music) return;
     const expectedSongKey = this._shouldUsePracticeSong() ? "StayInsideMe" : window.currentlevel?.[0];

@@ -1537,7 +1537,18 @@ class LevelEditor {
 
 
   _getSheetForFrameThingy(frameName) {
-    const sheets = ["GJ_WebSheet", "GJ_GameSheet", "GJ_GameSheet02", "GJ_GameSheet03", "GJ_GameSheet04", "GJ_GameSheetEditor"];
+    const sheets = [
+        "GJ_WebSheet",
+        "GJ_GameSheet",
+        "GJ_GameSheet02",
+        "GJ_GameSheet03",
+        "GJ_GameSheet04",
+        "FireSheet_01-hd",
+        "PixelSheet_01-hd",
+        "GJ_GameSheetEditor",
+        "GJ_ParticleSheet-uhd",
+        "Wavesheet"
+    ];
     for (const key of sheets) {
         if (this.textures.exists(key) && this.textures.get(key).has(frameName)) {
             return key;
@@ -1547,7 +1558,7 @@ class LevelEditor {
 
 
   _getTextureRefForFrameThingy(frameName) { // getSheetForFrameThingy: the sequel
-    const sheets = ["GJ_WebSheet", "GJ_GameSheet", "GJ_GameSheet02", "GJ_GameSheet03", "GJ_GameSheet04", "GJ_GameSheetEditor"];
+    const sheets = ["GJ_WebSheet", "GJ_GameSheet", "GJ_GameSheet02", "GJ_GameSheet03", "GJ_GameSheet04", "GJ_GameSheetEditor", "PixelSheet_01-hd", "GJ_ParticleSheet-uhd", "FireSheet_01-hd"];
     for (const key of sheets) {
         if (this.textures.exists(key) && this.textures.get(key).has(frameName)) {
             return {
@@ -1688,6 +1699,7 @@ class LevelEditor {
 
     if (frameName.indexOf("sawblade") >= 0 && mainSprite) {
         mainSprite.setTint(0x000000);
+        mainSprite._isBlack = true;
 
         const sawMirror = addPreviewSprite(frameName, 0, 0, objectDef, 0.001, {
             tint: 0x000000,
@@ -1697,6 +1709,7 @@ class LevelEditor {
         if (sawMirror) {
             sawMirror.x = mainSprite.x;
             sawMirror.y = mainSprite.y;
+            sawMirror._isBlack = true;
         }
     }
 
@@ -1710,6 +1723,10 @@ class LevelEditor {
 
     if (objectDef.children) {
         for (const childDef of objectDef.children) {
+            if (childDef.portalGuide || childDef.orbGuide) {
+                continue;
+            }
+
             let childDx = childDef.dx || 0;
             let childDy = childDef.dy || 0;
 
@@ -1746,6 +1763,7 @@ class LevelEditor {
 
             if (frameName.indexOf("sawblade") >= 0 && childSprite) {
                 childSprite.setTint(0x000000);
+                childSprite._isBlack = true;
 
                 const childMirror = addPreviewSprite(
                     childDef.frame,
@@ -1761,6 +1779,7 @@ class LevelEditor {
 
                 if (childMirror) {
                     childMirror.x = childSprite.x;
+                    childMirror._isBlack = true;
                     childMirror.y = childSprite.y;
                 }
             }
@@ -1805,7 +1824,7 @@ class LevelEditor {
     const maxDim = Math.max(visualW, visualH);
     const scaleMultiplier = targetSize / maxDim;
 
-    preview.setScale(Math.min(scaleMultiplier, 0.6));
+    preview.setScale(Math.min(scaleMultiplier, 0.725));
 
     return preview;
   }
@@ -1817,9 +1836,12 @@ class LevelEditor {
     if (this._categoryContainer) this._categoryContainer.destroy();
 
     const OBJECT_CATEGORIES = [
-        { id: "blocks",  icon: "tab1", types: ["solid", "slope"] },
+        { id: "blocks",  icon: "tab1", types: ["solid", "soliddeco"] },
+        { id: "slopes",  icon: "tab6", types: ["slope"] },
         { id: "hazards", icon: "tab2", types: ["hazard", "spike"] },
-        { id: "orbs",    icon: "tab3", types: ["ring", "pad", "portal", "speed"] },
+        { id: "orbs",    icon: "tab3", types: ["ring", "pad", "portal", "speed", "coin"] },
+        { id: "pixel",   icon: "tab7", types: ["pixel"] },
+        { id: "particle", icon: "tab8", types: ["particle"] },
         { id: "deco",    icon: "tab4", types: ["deco"] },
         { id: "triggers",icon: "tab5", types: ["trigger"] },
     ];
@@ -1847,15 +1869,30 @@ class LevelEditor {
             });
         });
         const activeCatDef = OBJECT_CATEGORIES.find(c => c.id === this._currentBuildCategory);
+        const matchesCategory = (catDef, rawDef) => {
+            if (!catDef || !rawDef) return false;
+            if ((catDef.types || []).includes(rawDef.type)) return true;
+            if (catDef.id !== "slopes") return false;
+
+            const framesToCheck = [];
+            if (typeof rawDef.frame === "string") framesToCheck.push(rawDef.frame);
+            if (typeof rawDef.glow_frame === "string") framesToCheck.push(rawDef.glow_frame);
+            if (Array.isArray(rawDef.children)) {
+                for (const child of rawDef.children) {
+                    if (child && typeof child.frame === "string") framesToCheck.push(child.frame);
+                }
+            }
+
+            return framesToCheck.some(frame => typeof frame === "string" && frame.toLowerCase().includes("slope"));
+        };
+
         for (let i = 1; i <= this._totalIds; i++) {
             if (i === 749) continue;
             const def = getObjectFromId(i);
             const rawDef = allObjectsData[String(i)]; 
             
-            if (def && rawDef) {
-                if (activeCatDef.types.includes(rawDef.type)) {
-                    itemsForGrid.push({ type: "object", id: i, frame: def.frame });
-                }
+            if (def && rawDef && matchesCategory(activeCatDef, rawDef)) {
+                itemsForGrid.push({ type: "object", id: i, frame: def.frame });
             }
         }
     } else if (this._editorTab === "edit") {
@@ -2690,7 +2727,6 @@ class LevelEditor {
     return true;
   }
 
-
   _refreshTeleportExitVisualsForSaveObject(enterSaveObj) {
     if (!enterSaveObj || parseInt(enterSaveObj.id ?? 0, 10) !== 747) return false;
 
@@ -2798,6 +2834,11 @@ class LevelEditor {
 
     if (!objectDef) return;
 
+    const offsetX = Number.parseFloat(objectDef.editorOffsetX ?? objectDef.offsetX ?? 0);
+    const offsetY = Number.parseFloat(objectDef.editorOffsetY ?? objectDef.offsetY ?? 0);
+    const placementX = transformedX + (Number.isFinite(offsetX) ? offsetX : 0);
+    const placementY = transformedY + (Number.isFinite(offsetY) ? offsetY : 0);
+
     if (parseInt(objId ?? 0, 10) === 749) {
         this._applyTeleportExitPlacement(transformedX, transformedY);
         return;
@@ -2805,8 +2846,8 @@ class LevelEditor {
 
     const saveData = {
         id: objId,
-        x: transformedX,
-        y: transformedY,
+        x: placementX,
+        y: placementY,
         flipX: false,
         flipY: false,
         rot: 0,
@@ -2825,8 +2866,8 @@ class LevelEditor {
         flipGravity: false,
         _raw: {
             "1": String(objId),
-            "2": String(transformedX),
-            "3": String(transformedY),
+            "2": String(placementX),
+            "3": String(placementY),
             "4": "0",
             "5": "0",
             "6": "0",
