@@ -2321,7 +2321,7 @@ if (this.p.isFlying || this.p.isUfo) {
     }
   }
   killPlayer() {
-    if (this.p.isDead) {
+    if (this.p.isDead || this._scene._macroBot?.playing) {
       return;
     }
     this.p.isDead = true;

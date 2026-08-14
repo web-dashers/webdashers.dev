@@ -5554,7 +5554,7 @@ _buildSettingsPopup() {
       const panel = this._drawScale9(centerX, centerY, panelWidth, panelHeight, "GJ_square02", corner, 0xffffff, 1);
       this._macroPopup.add(panel);
 
-      this._macroPopup.add(this.add.bitmapText(centerX, centerY - (panelHeight / 2) + 45, "bigFont", "Web Bot v2.0", 40).setOrigin(0.5));
+      this._macroPopup.add(this.add.bitmapText(centerX, centerY - (panelHeight / 2) + 45, "bigFont", "Web Bot v2.1", 40).setOrigin(0.5));
 
       if (this._macroName === undefined) {  
           this._macroName = this._macroBot?.meta?.name || null;
@@ -6848,11 +6848,6 @@ _buildSettingsPopup() {
       return;
     }
 
-    if (!cancelInput) {
-      if (!this._clickHistory) this._clickHistory = [];
-      this._clickHistory.push(this.time.now);
-    }
-
     if (!this._slideIn && !this._state.isDead && !cancelInput) {
       this._state.upKeyDown = true;
       this._state.upKeyPressed = true;
@@ -7734,8 +7729,12 @@ _buildSettingsPopup() {
     } else {
       this._cpsIndicator.setText("0 CPS");
     }
-    if (this._state.upKeyDown){
-      this._cpsIndicator.setTint(0x00ff00);
+    if (this._state.upKeyDown && !this._levelWon && !this._state.isDead){
+      if (this._cpsIndicator.tint !== 0x00ff00) {
+        this._cpsIndicator.setTint(0x00ff00);
+        if (!this._clickHistory) this._clickHistory = [];
+        this._clickHistory.push(this.time.now);
+      }
     } else{
       this._cpsIndicator.setTint(0xffffff);
     }
@@ -8763,8 +8762,7 @@ _applyMirrorEffect() {
       }
     });
   }
-
-    _triggerEndPortal() {
+  _triggerEndPortal() {
     if (this._isDual && this._player2 && this._state2 && !this._state2.isDead) {
       this._player2.playEndAnimation(this._level.endXPos, () => {}, this._endPortalGameY);
     }
