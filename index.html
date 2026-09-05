@@ -34,9 +34,66 @@
     <script src="assets/scripts/api/GDapiWrapper.js"></script>
     <script src="assets/scripts/utils/api-config.js"></script>
     <script src="assets/scripts/api/account-api.js"></script>
-    <!-- worker -->
+    <!-- workerssdsss nwo-->
     <script>
-        window._gdProxyUrl = "https://gd-proxy.gmdc.workers.dev";
+        (function () {
+            var GD_PROXY_HOSTS = [
+                "https://gd-proxy.gmdc.workers.dev",
+                "https://fallbackgdproxy.gmdc.workers.dev",
+                "https://fallback2.gmdc.workers.dev"
+            ];
+            window._gdProxyUrl = GD_PROXY_HOSTS[0];
+            window._gdProxyHosts = GD_PROXY_HOSTS;
+            var activeIndex = 0;
+            var nativeFetch = window.fetch.bind(window);
+            function matchingHost(url) {
+                for (var i = 0; i < GD_PROXY_HOSTS.length; i++) {
+                    if (url.indexOf(GD_PROXY_HOSTS[i]) === 0) return GD_PROXY_HOSTS[i];
+                }
+                return null;
+            }
+            function withHost(url, oldHost, newHost) {
+                return newHost + url.slice(oldHost.length);
+            }
+            window.fetch = function (input, init) {
+                var isRequestObj = (typeof Request !== "undefined") && (input instanceof Request);
+                var url = isRequestObj ? input.url : input;
+                if (typeof url !== "string") {
+                    return nativeFetch(input, init);
+                }
+            var oldHost = matchingHost(url);
+                if (!oldHost) {
+                    return nativeFetch(input, init);
+                }
+                var attempts = 0;
+                var lastError = null;
+                function tryHost(hostIndex) {
+                    var host = GD_PROXY_HOSTS[hostIndex];
+                    var attemptUrl = withHost(url, oldHost, host);
+                    var attemptInput = isRequestObj ? new Request(attemptUrl, input) : attemptUrl;
+
+                    return nativeFetch(attemptInput, init).then(function (res) {
+                        if ((res.status === 429 || res.status === 503) && attempts < GD_PROXY_HOSTS.length - 1) {
+                            attempts++;
+                            var nextIndex = (hostIndex + 1) % GD_PROXY_HOSTS.length;
+                            return tryHost(nextIndex);
+                        }
+                        activeIndex = hostIndex;
+                        window._gdProxyUrl = host;
+                        return res;
+                    }, function (err) {
+                        lastError = err;
+                        if (attempts < GD_PROXY_HOSTS.length - 1) {
+                            attempts++;
+                            var nextIndex = (hostIndex + 1) % GD_PROXY_HOSTS.length;
+                            return tryHost(nextIndex);
+                        }
+                        throw lastError;
+                    });
+                }
+                return tryHost(activeIndex);
+            };
+        })();
     </script>
     <script defer src="assets/scripts/utils/config.js"></script>
     <script defer src="assets/scripts/core/triggers.js"></script>
@@ -45,7 +102,7 @@
     <script defer src="assets/scripts/core/audio.js"></script>
     <script defer src="assets/scripts/core/loading-screen.js"></script>
     <script defer src="assets/scripts/core/level-editor.js?latest"></script>
-    <script defer src="assets/scripts/core/game-scene.js?latest2"></script>
+    <script defer src="assets/scripts/core/game-scene.js?latest3"></script>
     <script defer src="assets/scripts/core/main.js"></script>
     <script>
         new ResizeObserver(() => {
