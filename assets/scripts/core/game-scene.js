@@ -6476,6 +6476,7 @@ _showwippopup() {
     */
     const updateEntries = [
       { text: "Update Log", scale: 1, font: "goldFont" },
+      { text: "Sorry for the 10 hour downtime\ni forgot to change the proxy\nurl because i changed the\nsubdomain - rohanis0000", scale: 0.7, color: 0xaaddff },
       { text: "To anyone who is wondering\nwhy online features don't work,\nthe worker is constantly being\nused and its request limit\nis hit daily in a short time\ndue to many users using\nthe online levels feature.\nThis has hopefully been\nfixed now with this update.\n- rohanis0000", scale: 0.7, color: 0xaaddff },
       { text: "Added 2 new proxies to fall back\nto when ones request limit is\n hit to allow you to still\nbe able to use online features.", scale: 0.65 }
     ]; 
