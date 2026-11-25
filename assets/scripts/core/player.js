@@ -44,6 +44,7 @@ class PlayerState {
     this._robotHold = false;
     this._robotHoldTimer = 0;
     this._spiderTeleportNoclipDeathPending = false;
+    this._spiderOrbHold = false;
     this.ballShouldRotate = false;
     this.ballRotateOpposite = false;
     this.ballNormalRotate = 0.86;
@@ -183,9 +184,9 @@ class WaveTrail {
     this._glowGfx.setBlendMode(Phaser.BlendModes.ADD);
   }
   addToContainer(container, depth) {
-    container.add(this._glowGfx);
+    container.addAt(this._glowGfx, 0);
     this._glowGfx.setDepth(depth - 1);
-    container.add(this._gfx);
+    container.addAt(this._gfx, 1);
     this._gfx.setDepth(depth);
   }
   setPosition(x, y) { this._pos.x = x; this._pos.y = y; this._posInit = true; }
@@ -364,17 +365,18 @@ class WaveTrail {
     }
   }
 }
-function ds(scene, x, y, frameName, depth, isVisible) {
-  let atlasData = getAtlasFrame(scene, frameName);
+function ds(scene, x, y, frameName, depth, isVisible, fallbackFrame) {
+  const frame = getAtlasFrame(scene, frameName);
+  const atlasData = frame || (fallbackFrame && getAtlasFrame(scene, fallbackFrame));
   if (!atlasData) {
     return null;
   }
   let image = scene.add.image(x, y, atlasData.atlas, atlasData.frame);
   image.setDepth(depth);
-  image.setVisible(isVisible);
-  return {
-    sprite: image
-  };
+  image.setVisible(isVisible && (!fallbackFrame || !!frame));
+  return fallbackFrame
+    ? { sprite: image, kind: "extra", _hasIconFrame: !!frame }
+    : { sprite: image };
 }
 
 function _textureHasFrameSafe(scene, textureKey, frameName) {
@@ -824,6 +826,14 @@ class PlayerObject {
 
         layer.sprite.setVisible(kind === "glow" ? !!layer.sprite._glowEnabled : true);
       };
+      if (!part.extra && _textureHasFrameSafe(this._scene, _iconTexKeyFor(this._scene, resolvedFrames.extra), resolvedFrames.extra)) {
+        part.extra = _makeAtlasLayer(this._scene, commonX, commonY, _iconTexKeyFor(this._scene, resolvedFrames.extra), resolvedFrames.extra, 8 + zValue * 0.1 + 0.08, false, null, "extra");
+        if (part.extra) {
+          part.layers.push(part.extra);
+          this._spiderLayers.push(part.extra);
+          this._allLayers.push(part.extra);
+        }
+      }
       applyLayer(part.glow, "glow", -0.04);
       applyLayer(part.base, "base", 0);
       applyLayer(part.overlay, "overlay", -0.02);
@@ -1178,6 +1188,14 @@ class PlayerObject {
         }
         layer.sprite.setVisible(kind === "glow" ? !!layer.sprite._glowEnabled : true);
       };
+      if (!part.extra && _textureHasFrameSafe(this._scene, _iconTexKeyFor(this._scene, resolvedFrames.extra), resolvedFrames.extra)) {
+        part.extra = _makeAtlasLayer(this._scene, commonX, commonY, _iconTexKeyFor(this._scene, resolvedFrames.extra), resolvedFrames.extra, 8 + zValue * 0.1 + 0.08, false, null, "extra");
+        if (part.extra) {
+          part.layers.push(part.extra);
+          this._robotLayers.push(part.extra);
+          this._allLayers.push(part.extra);
+        }
+      }
       applyLayer(part.glow, "glow", -0.04);
       applyLayer(part.base, "base", 0);
       applyLayer(part.overlay, "overlay", -0.02);
@@ -1299,7 +1317,7 @@ class PlayerObject {
     this._playerGlowLayer = ds(spriteY, particleY, spriteX, `${window.currentPlayer}_glow_001.png`, 9, false);
     this._playerSpriteLayer = ds(spriteY, particleY, spriteX, `${window.currentPlayer}_001.png`, 10, true);
     this._playerOverlayLayer = ds(spriteY, particleY, spriteX, `${window.currentPlayer}_2_001.png`, 8, true);
-    this._playerExtraLayer = ds(spriteY, particleY, spriteX, `${window.currentPlayer}_extra_001.png`, 12, true);
+    this._playerExtraLayer = ds(spriteY, particleY, spriteX, `${window.currentPlayer}_extra_001.png`, 12, true, `${window.currentPlayer}_001.png`);
     if (this._playerGlowLayer) {
       this._playerGlowLayer.sprite.setTint(this._secondaryColor());
       this._playerGlowLayer.sprite._glowEnabled = false;
@@ -1319,7 +1337,7 @@ class PlayerObject {
     this._shipGlowLayer = ds(spriteY, particleY, spriteX, `${window.currentShip}_glow_001.png`, 9, false);
     this._shipSpriteLayer = ds(spriteY, particleY, spriteX, `${window.currentShip}_001.png`, 10, false);
     this._shipOverlayLayer = ds(spriteY, particleY, spriteX, `${window.currentShip}_2_001.png`, 8, false);
-    this._shipExtraLayer = ds(spriteY, particleY, spriteX, `${window.currentShip}_extra_001.png`, 12, false);
+    this._shipExtraLayer = ds(spriteY, particleY, spriteX, `${window.currentShip}_extra_001.png`, 12, false, `${window.currentShip}_001.png`);
     if (this._shipGlowLayer) {
       this._shipGlowLayer.sprite.setTint(this._secondaryColor());
       this._shipGlowLayer.sprite._glowEnabled = false;
@@ -1351,6 +1369,7 @@ class PlayerObject {
     this._ballGlowLayer = ds(spriteY, particleY, spriteX, `${window.currentBall}_glow_001.png`, 9, false);
     this._ballSpriteLayer = ds(spriteY, particleY, spriteX, `${window.currentBall}_001.png`, 10, false);
     this._ballOverlayLayer = ds(spriteY, particleY, spriteX, `${window.currentBall}_2_001.png`, 8, false);
+    this._ballExtraLayer = ds(spriteY, particleY, spriteX, `${window.currentBall}_extra_001.png`, 12, false, `${window.currentBall}_001.png`);
     if (this._ballGlowLayer) {
       this._ballGlowLayer.sprite.setTint(this._secondaryColor());
       this._ballGlowLayer.sprite._glowEnabled = false;
@@ -1363,7 +1382,7 @@ class PlayerObject {
     }
     this._waveGlowLayer = ds(spriteY, particleY, spriteX, `${window.currentWave}_glow_001.png`, 9, false);
     this._waveOverlayLayer = ds(spriteY, particleY, spriteX, `${window.currentWave}_2_001.png`, 8, false);
-    this._waveExtraLayer = null;
+    this._waveExtraLayer = ds(spriteY, particleY, spriteX, `${window.currentWave}_extra_001.png`, 12, false, `${window.currentWave}_001.png`);
     this._waveSpriteLayer = ds(spriteY, particleY, spriteX, `${window.currentWave}_001.png`, 10, false);
     if (this._waveGlowLayer) {
       this._waveGlowLayer.sprite.setTint(this._secondaryColor());
@@ -1379,7 +1398,7 @@ class PlayerObject {
     this.shipSprite = this._shipSpriteLayer.sprite;
     this._playerLayers = [this._playerSpriteLayer, this._playerGlowLayer, this._playerOverlayLayer, this._playerExtraLayer];
     this._shipLayers = [this._shipSpriteLayer, this._shipGlowLayer, this._shipOverlayLayer, this._shipExtraLayer];
-    this._ballLayers = [this._ballSpriteLayer, this._ballGlowLayer, this._ballOverlayLayer].filter(_0x37ad93 => !!_0x37ad93);
+    this._ballLayers = [this._ballSpriteLayer, this._ballGlowLayer, this._ballOverlayLayer, this._ballExtraLayer].filter(_0x37ad93 => !!_0x37ad93);
     this._waveLayers = [this._waveSpriteLayer, this._waveOverlayLayer, this._waveExtraLayer, this._waveGlowLayer].filter(_0x37ad93 => !!_0x37ad93);
     this._initSpiderAnimationParts(spriteY, particleY, spriteX);
     this._spiderSpriteLayer = this._spiderLayers.find(layer => layer.kind === "base") || null;
@@ -1394,7 +1413,7 @@ class PlayerObject {
     this._birdSpriteLayer = ds(spriteY, particleY, spriteX, `${window.currentBird}_001.png`, 10, false);
     this._birdGlowLayer = ds(spriteY, particleY, spriteX, `${window.currentBird}_2_001.png`, 9, false);
     this._birdOverlayLayer = ds(spriteY, particleY, spriteX, `${window.currentBird}_3_001.png`, 8, false);
-    this._birdExtraLayer = ds(spriteY, particleY, spriteX, `${window.currentBird}_extra_001.png`, 12, false);
+    this._birdExtraLayer = ds(spriteY, particleY, spriteX, `${window.currentBird}_extra_001.png`, 12, false, `${window.currentBird}_001.png`);
     if (this._birdSpriteLayer) {
       this._birdSpriteLayer.sprite.setTint(this._primaryColor());
     }
@@ -1631,7 +1650,7 @@ class PlayerObject {
     this._streak = new StreakManager(this._scene, "streak_01", 0.231, 10, 8, 100, this._secondaryColor(), 0.7);
     this._streak.addToContainer(this._gameLayer.container, 8);
     this._waveTrail = new WaveTrail(this._scene, this._primaryColor(), this._primaryColor());
-    this._waveTrail.addToContainer(this._gameLayer.container, 9);
+    this._waveTrail.addToContainer(this._gameLayer.topContainer, 9);
   }
   _updateParticles(_0xc43238, _0x52b718, _0x5af874) {
     if (this._scene?._editorPlaytestActive) {
@@ -1786,6 +1805,17 @@ class PlayerObject {
     this._waveTrail?.stop();
     this._waveTrail?.reset();
   }
+  _syncModeIcons() {
+    if (this._hidden || this.p.isDead) return;
+    const p = this.p;
+    this.setCubeVisible(!p.isBall && !p.isWave && !p.isSpider && !p.isRobot);
+    this.setShipVisible(!!p.isFlying);
+    this.setBirdVisible(!!p.isUfo);
+    this.setBallVisible(!!p.isBall);
+    this.setWaveVisible(!!p.isWave);
+    this.setSpiderVisible(!!p.isSpider);
+    this.setRobotVisible(!!p.isRobot);
+  }
   setCubeVisible(_0x411813) {
     const isCustom = this._playerSpriteLayer && this._playerSpriteLayer.sprite._customCubeIcon;
     this._playerSpriteLayer.sprite.setVisible(_0x411813);
@@ -1796,7 +1826,7 @@ class PlayerObject {
       this._playerOverlayLayer.sprite.setVisible(isCustom ? false : _0x411813);
     }
     if (this._playerExtraLayer) {
-      this._playerExtraLayer.sprite.setVisible(isCustom ? false : _0x411813);
+      this._playerExtraLayer.sprite.setVisible(this._playerExtraLayer._hasIconFrame !== false && (isCustom ? false : _0x411813));
     }
   }
   setShipVisible(_0x1c5620) {
@@ -1808,7 +1838,7 @@ class PlayerObject {
       this._shipOverlayLayer.sprite.setVisible(_0x1c5620);
     }
     if (this._shipExtraLayer) {
-      this._shipExtraLayer.sprite.setVisible(_0x1c5620);
+      this._shipExtraLayer.sprite.setVisible(this._shipExtraLayer._hasIconFrame !== false && (_0x1c5620));
     }
   }
   setBirdVisible(v) {
@@ -1816,7 +1846,7 @@ class PlayerObject {
       if (layer === this._birdGlowLayer) {
         layer.sprite.setVisible(v && layer.sprite._glowEnabled);
       } else {
-        layer.sprite.setVisible(v);
+        layer.sprite.setVisible(v && (layer.kind !== "extra" || layer._hasIconFrame !== false));
       }
     }
   }
@@ -1830,6 +1860,9 @@ class PlayerObject {
     if (this._ballOverlayLayer) {
       this._ballOverlayLayer.sprite.setVisible(_0x5685cf);
     }
+    if (this._ballExtraLayer) {
+      this._ballExtraLayer.sprite.setVisible(this._ballExtraLayer._hasIconFrame !== false && (_0x5685cf));
+    }
   }
   setWaveVisible(_0x2d078b) {
     if (this._waveSpriteLayer) {
@@ -1839,7 +1872,7 @@ class PlayerObject {
       this._waveOverlayLayer.sprite.setVisible(_0x2d078b);
     }
     if (this._waveExtraLayer) {
-      this._waveExtraLayer.sprite.setVisible(_0x2d078b);
+      this._waveExtraLayer.sprite.setVisible(this._waveExtraLayer._hasIconFrame !== false && (_0x2d078b));
     }
     if (this._waveGlowLayer) {
       this._waveGlowLayer.sprite.setVisible(_0x2d078b && this._waveGlowLayer.sprite._glowEnabled);
@@ -1949,7 +1982,7 @@ if (this.p.isFlying || this.p.isUfo) {
 	if (this.p.isUfo && !this.p.isDead) {
         for (const layer of this._birdLayers) {
           if (layer) {
-            layer.sprite.setVisible(true);
+            layer.sprite.setVisible(layer.kind !== "extra" || layer._hasIconFrame !== false);
             layer.sprite.x = _0x7f0705 + _0x1b1d28;
             layer.sprite.y = _0x1a433c + _0x185f91 + (this.p.gravityFlipped ? -15 : 5);
             layer.sprite.rotation = this.p.mirrored ? -playerRotation : playerRotation;
@@ -2149,6 +2182,7 @@ if (this.p.isFlying || this.p.isUfo) {
     this.stopRotation();
     this._rotation = 0;
     this._particleEmitter.stop();
+    this._particleActive = false;
     this._flyParticle2Active = false;
     this._streak.reset();
     this._streak.start();
@@ -2163,6 +2197,7 @@ if (this.p.isFlying || this.p.isUfo) {
     if (_0xeb37c6) {
       spawnY = _0xeb37c6.portalY !== undefined ? _0xeb37c6.portalY : _0xeb37c6.y;
     }
+    this._syncModeIcons();
     this._setGamemodeFlyBounds(true, spawnY, f, false);
   }
   applyShakeOffset(ox, oy) {
@@ -2212,6 +2247,7 @@ if (this.p.isFlying || this.p.isUfo) {
           layer.sprite.setScale(1);
         }
       }
+      this._syncModeIcons();
       this._setGamemodeFlyBounds(false, 0);
     }
   }
@@ -2240,6 +2276,7 @@ if (this.p.isFlying || this.p.isUfo) {
     if (_0x36bb3d) {
       _0x18df19 = _0x36bb3d.portalY !== undefined ? _0x36bb3d.portalY : _0x36bb3d.y;
     }
+    this._syncModeIcons();
     this._setGamemodeFlyBounds(true, _0x18df19, f - a * 2, false);
   }
   exitBallMode() {
@@ -2260,6 +2297,7 @@ if (this.p.isFlying || this.p.isUfo) {
     this.setBallVisible(false);
     this.setWaveVisible(false);
     this.setCubeVisible(true);
+    this._syncModeIcons();
     this._setGamemodeFlyBounds(false, 0);
   }
   enterWaveMode(_0x5a10cc = null) {
@@ -2289,6 +2327,7 @@ if (this.p.isFlying || this.p.isUfo) {
     if (_0x5a10cc) {
       _0x38b484 = _0x5a10cc.portalY !== undefined ? _0x5a10cc.portalY : _0x5a10cc.y;
     }
+    this._syncModeIcons();
     this._setGamemodeFlyBounds(true, _0x38b484, f, false);
   }
   exitWaveMode() {
@@ -2312,6 +2351,7 @@ if (this.p.isFlying || this.p.isUfo) {
     this.setBallVisible(this.p.isBall);
     this.setShipVisible(this.p.isFlying);
     this.setSpiderVisible(false);
+    this._syncModeIcons();
     this._setGamemodeFlyBounds(false, 0);
   }
   enterSpiderMode(portal = null) {
@@ -2346,6 +2386,7 @@ if (this.p.isFlying || this.p.isUfo) {
     const spiderBlockSize = typeof a !== "undefined" ? a : 30;
     const spiderBaseHeight = typeof f !== "undefined" ? f : 480;
     const spiderFlyHeight = Math.max(spiderBlockSize, spiderBaseHeight - spiderBlockSize);
+    this._syncModeIcons();
     this._setGamemodeFlyBounds(true, _y, spiderFlyHeight, false, spiderFlyHeight);
     if (savedPortalYVelocity !== null) this.p.yVelocity = savedPortalYVelocity;
     this._primeSpiderAnimationFrame(1 / 30);
@@ -2353,6 +2394,7 @@ if (this.p.isFlying || this.p.isUfo) {
   exitSpiderMode() {
     if (!this.p.isSpider) return;
     this.p.isSpider = false;
+    this.p._spiderOrbHold = false;
     this.p.yVelocity = 0;
     this.p.onGround = false;
     this.p.canJump = false;
@@ -2371,6 +2413,7 @@ if (this.p.isFlying || this.p.isUfo) {
     this._robotJumpFlamePulse = 0;
     this._robotJumpFlameFadeInTimer = 0;
     this.setCubeVisible(true);
+    this._syncModeIcons();
     this._setGamemodeFlyBounds(false, 0);
   }
   enterRobotMode(portal = null) {
@@ -2402,6 +2445,7 @@ if (this.p.isFlying || this.p.isUfo) {
     this.setSpiderVisible(false);
     this.setBirdVisible(false);
     this.setRobotVisible(true);
+    this._syncModeIcons();
     this._setGamemodeFlyBounds(false, 0);
     if (savedPortalYVelocity !== null) this.p.yVelocity = savedPortalYVelocity;
     this._primeRobotAnimationFrame(1 / 30);
@@ -2420,6 +2464,7 @@ if (this.p.isFlying || this.p.isUfo) {
     this._rotation = 0;
     this.setRobotVisible(false);
     this.setCubeVisible(!this.p.isBall && !this.p.isFlying && !this.p.isWave && !this.p.isUfo && !this.p.isSpider);
+    this._syncModeIcons();
     this._setGamemodeFlyBounds(false, 0);
   }
   enterUfoMode(_portal = null, fromCheckpoint = false) {
@@ -2440,6 +2485,7 @@ if (this.p.isFlying || this.p.isUfo) {
     this.stopRotation();
     this._rotation = 0;
     this._particleEmitter.stop();
+    this._particleActive = false;
     this._streak.reset();
     this._streak.start();
     this.setBallVisible(false);
@@ -2457,6 +2503,7 @@ if (this.p.isFlying || this.p.isUfo) {
     if (_portal) {
       _spawnY = _portal.portalY !== undefined ? _portal.portalY : _portal.y;
     }
+    this._syncModeIcons();
     this._setGamemodeFlyBounds(true, _spawnY, f, false);
   }
   exitUfoMode() {
@@ -2483,17 +2530,20 @@ if (this.p.isFlying || this.p.isUfo) {
         _0xe1b715.sprite.setScale(1);
       }
     }
+    this._syncModeIcons();
     this._setGamemodeFlyBounds(false, 0);
   }
   hitGround(skipBurst = false) {
+    const _dashSliding = this._isDashSpinning();
+    if (_dashSliding) skipBurst = true;
     this._slopeLaunchSpin = false;
     const _0x4a38a5 = !skipBurst && !this.p.onGround;
     if (!this.p.isFlying && !this.p.isWave && !this.p.isUfo) {
       this.p.lastGroundY = this.p.y;
     }
     this.p.yVelocity = 0;
-    this.p.onGround = true;
-    this.p.canJump = true;
+    this.p.onGround = !_dashSliding;
+    this.p.canJump = !_dashSliding;
     this.p.isJumping = false;
     this.p.queuedHold = false;
     if (this.p.isBall) {
@@ -2512,7 +2562,7 @@ if (this.p.isFlying || this.p.isUfo) {
     } else if (this.p.isWave) {
       this._rotation = 0;
     }
-    this.stopRotation();
+    if (!_dashSliding) this.stopRotation();
     if (_0x4a38a5 && !this.p.isFlying && !this.p.isWave && !this.p.isSpider && !this._scene?._editorPlaytestActive) {
       if (!window.enableLDM) {
         this._landIdx = !this._landIdx;
@@ -2650,6 +2700,11 @@ if (this.p.isFlying || this.p.isUfo) {
     this._waveTrail.stop();
     this._waveTrail.reset();
     this.setSpiderVisible(false);
+    this.p.isDashing = false;
+    this.p.dashYVelocity = 0;
+    if (this._dashAnimationSprite) this._dashAnimationSprite.setVisible(false);
+    this._dashAnimationFrame = 0;
+    this._dashAnimationTimer = 0;
     if (this._spiderTeleportCircles?.length) {
       for (const circle of this._spiderTeleportCircles) if (circle?.destroy) circle.destroy();
       this._spiderTeleportCircles = [];
@@ -2754,7 +2809,7 @@ if (this.p.isFlying || this.p.isUfo) {
       height: sliderBar,
       add: false
     });
-    const _0x5c571a = [this._playerGlowLayer, this._playerOverlayLayer, this._ballGlowLayer, this._ballOverlayLayer, this._waveGlowLayer, this._waveOverlayLayer, this._waveExtraLayer, this._shipGlowLayer, this._shipOverlayLayer, this._spiderGlowLayer, this._spiderOverlayLayer, this._robotGlowLayer, this._robotOverlayLayer, this._playerSpriteLayer, this._playerExtraLayer, this._ballSpriteLayer, this._waveSpriteLayer, this._shipSpriteLayer, this._shipExtraLayer, this._spiderSpriteLayer, this._spiderExtraLayer, this._robotSpriteLayer, this._robotExtraLayer, this._birdSpriteLayer, this._birdGlowLayer, this._birdOverlayLayer, this._birdExtraLayer, ...(this._robotLayers || [])];
+    const _0x5c571a = [this._playerGlowLayer, this._playerOverlayLayer, this._ballGlowLayer, this._ballOverlayLayer, this._ballExtraLayer, this._waveGlowLayer, this._waveOverlayLayer, this._waveExtraLayer, this._shipGlowLayer, this._shipOverlayLayer, this._spiderGlowLayer, this._spiderOverlayLayer, this._robotGlowLayer, this._robotOverlayLayer, this._playerSpriteLayer, this._playerExtraLayer, this._ballSpriteLayer, this._waveSpriteLayer, this._shipSpriteLayer, this._shipExtraLayer, this._spiderSpriteLayer, this._spiderExtraLayer, this._robotSpriteLayer, this._robotExtraLayer, this._birdSpriteLayer, this._birdGlowLayer, this._birdOverlayLayer, this._birdExtraLayer, ...(this._robotLayers || [])];
 	  for (const _0x1f09e3 of _0x5c571a) {
       if (!_0x1f09e3) {
         continue;
@@ -3020,19 +3075,6 @@ if (this.p.isFlying || this.p.isUfo) {
   _getPortalShineAtlasFrameData(scene, frameName) {
     if (!scene?.textures) return null;
 
-    const requestedSheet = "GJ_GameSheet04";
-    if (scene.textures.exists(requestedSheet)) {
-      const texture = scene.textures.get(requestedSheet);
-      const frameData = texture?.get?.(frameName);
-      if (frameData && frameData.name !== "__MISSING") {
-        return {
-          atlasFrame: { atlas: requestedSheet, frame: frameName },
-          atlasTexture: texture,
-          frameData
-        };
-      }
-    }
-
     if (typeof getAtlasFrame !== "function") return null;
     const atlasFrame = getAtlasFrame(scene, frameName);
     if (!atlasFrame) return null;
@@ -3064,17 +3106,7 @@ if (this.p.isFlying || this.p.isUfo) {
   }
 
   _getPortalShinePackedFrameMeta(frameName) {
-    const shineAtlasMeta = {
-      "boost_01_shine_001.png": { rotated: false, frame: { x: 910, y: 1038, w: 64, h: 82 }, sourceSize: { w: 64, h: 82 }, spriteSourceSize: { x: 0, y: 0, w: 64, h: 82 } },
-      "boost_02_shine_001.png": { rotated: true, frame: { x: 325, y: 1083, w: 61, h: 108 }, sourceSize: { w: 61, h: 108 }, spriteSourceSize: { x: 0, y: 0, w: 61, h: 108 } },
-      "boost_03_shine_001.png": { rotated: true, frame: { x: 801, y: 1052, w: 96, h: 108 }, sourceSize: { w: 96, h: 108 }, spriteSourceSize: { x: 0, y: 0, w: 96, h: 108 } },
-      "boost_04_shine_001.png": { rotated: true, frame: { x: 332, y: 957, w: 125, h: 108 }, sourceSize: { w: 125, h: 108 }, spriteSourceSize: { x: 0, y: 0, w: 125, h: 108 } },
-      "boost_05_shine_001.png": { rotated: true, frame: { x: 937, y: 742, w: 128, h: 103 }, sourceSize: { w: 128, h: 103 }, spriteSourceSize: { x: 0, y: 0, w: 128, h: 103 } },
-      "portalshine_03_front_001.png": { rotated: true, frame: { x: 971, y: 1, w: 72, h: 178 }, sourceSize: { w: 88, h: 178 }, spriteSourceSize: { x: 16, y: 0, w: 72, h: 178 } },
-      "portalshine_04_front_001.png": { rotated: true, frame: { x: 1, y: 1092, w: 40, h: 174 }, sourceSize: { w: 50, h: 174 }, spriteSourceSize: { x: 10, y: 0, w: 40, h: 174 } },
-      "portalshine_05_front_001.png": { rotated: true, frame: { x: 176, y: 1069, w: 66, h: 148 }, sourceSize: { w: 66, h: 148 }, spriteSourceSize: { x: 0, y: 0, w: 66, h: 148 } }
-    };
-    return shineAtlasMeta[frameName] || null;
+    return null;
   }
 
   _getCorrectedPortalShineTextureKey(scene, frameName) {
@@ -3449,6 +3481,15 @@ if (this.p.isFlying || this.p.isUfo) {
     } };
   }
   _handleSlopeCollision(gameObj, pieceWidth, playersY, playersLastY, left, right, top, bottom, playerSize, waveHitSize, gamemodeAddition, previousWorldX) {
+    if (this.p.isWave) {
+      const surfaceY = gameObj.getSlopeSurfaceY(pieceWidth);
+      if (surfaceY === null) return { landed: false, died: false };
+      const insideSolid = gameObj.slopeSolidBelow
+        ? playersY - waveHitSize < surfaceY
+        : playersY + waveHitSize > surfaceY;
+      const backWall = this._slopeBackWallHit(gameObj, pieceWidth, playersY, surfaceY);
+      return { landed: false, died: insideSolid || backWall, immediate: insideSolid || backWall };
+    }
     if (this._usesGdCubeSlopes()) {
       const gdSurfaceY = gameObj.getSlopeSurfaceY(pieceWidth);
       if (gdSurfaceY !== null && this._slopeBackWallHit(gameObj, pieceWidth, playersY, gdSurfaceY)) {
@@ -3713,6 +3754,10 @@ if (this.p.isFlying || this.p.isUfo) {
     this.rotateActionStart = this._rotation;
     this.rotateActionTotal = Math.PI * this.flipMod() * direction;
   }
+  _isDashSpinning() {
+    return !!this.p.isDashing && !this.p.isFlying && !this.p.isBall && !this.p.isWave
+      && !this.p.isUfo && !this.p.isSpider && !this.p.isRobot && !this.p.isSwing;
+  }
   updateDashRotation(dt) {
     const spinSpeed = Math.PI * 4.0 * this.flipMod();
     this._rotation += spinSpeed * dt;
@@ -3888,11 +3933,16 @@ if (this.p.isFlying || this.p.isUfo) {
       this.p.pendingVelocity = null;
     }
     if (this.p.isDashing) {
-      if (!this.p.upKeyDown || this.p.onGround) {
+      if (!this.p.upKeyDown) {
         this.p.isDashing = false;
         this.p.dashYVelocity = 0;
+        this.p.yVelocity = 0;
       } else {
         this.p.yVelocity = this.p.dashYVelocity;
+        if (this._isDashSpinning()) {
+          this.p.onGround = false;
+          this.p.onCeiling = false;
+        }
         return;
       }
     }
@@ -3995,32 +4045,42 @@ if (this.p.isFlying || this.p.isUfo) {
 
     return false;
   }
-  _updateFlyJump(dt) {
-    const f23 = this.p.isMini ? 0.85 : 1;
-    const flip = this.flipMod();
-    const hold = !!this.p.upKeyDown;
-    const up = this.p.yVelocity * flip;
-    if (this.p.gdAccel && ((up >= 0 && up < 16 / f23) || (up <= 0 && up > -12.8 / f23))) {
-      this.p.gdAccel = false;
+  _updateFlyJump(_0x130c46) {
+    const _shipMiniScale = this.p.isMini ? 1.176470588 : 1;
+    let _0x203040 = 0.8;
+    if (this.p.upKeyDown) {
+      _0x203040 = -1;
     }
-    const below = up < 2 * this._gdSpeedConsts().grav;
-    let mult;
-    let k;
-    if (!hold) {
-      mult = this.p.gdAccel ? (up >= 0 ? 0.8 : -1) : 0.8;
-      if (!below) mult = 1.2;
-      k = 0.4;
-    } else {
-      mult = this.p.gdAccel ? (up >= 0 ? 0.8 : -1) : -1;
-      k = below ? 0.5 : 0.4;
+    let isFalling = this.p.gravityFlipped ? this.p.yVelocity > p : this.p.yVelocity < p;
+    if (this._scene?._isDual) {
+      if (this.p.gravityFlipped) {
+        isFalling = this.p.yVelocity > p;
+      } else {
+        isFalling = this.p.yVelocity < -p; 
+      }
     }
-    this.p.yVelocity = this._gdTrunc(this.p.yVelocity - flip * k * mult * p * dt / f23);
-    if (hold) {
+    if (!this.p.upKeyDown && !isFalling && !this.p._slopeBounceActive) {
+      _0x203040 = 1.2;
+    }
+    let _0x2d237f = 0.4;
+    if (this.p.upKeyDown && isFalling) {
+      _0x2d237f = 0.5;
+    }
+    this.p.yVelocity -= p * _0x130c46 * this.flipMod() * _0x203040 * _0x2d237f * _shipMiniScale;
+    if (this.p.upKeyDown) {
       this.p.onGround = false;
     }
-    if (!this.p.gdAccel) {
-      const upNow = Math.max(-12.8 / f23, Math.min(16 / f23, this.p.yVelocity * flip));
-      this.p.yVelocity = this._gdTrunc(upNow * flip);
+    if (!this.p.wasBoosted && !this.p._slopeBounceActive) {
+      if (this.p.gravityFlipped) {
+        this.p.yVelocity = Math.max(this.p.yVelocity, -16 * _shipMiniScale);
+        this.p.yVelocity = Math.min(this.p.yVelocity, 12.8 * _shipMiniScale);
+      } else {
+        this.p.yVelocity = Math.max(this.p.yVelocity, -12.8 * _shipMiniScale);
+        this.p.yVelocity = Math.min(this.p.yVelocity, 16 * _shipMiniScale);
+      }
+    }
+    if (this.p._slopeBounceActive && (isFalling || this.p.onGround)) {
+      this.p._slopeBounceActive = false;
     }
   }
   _updateBallJump(_0x2fe319) {
@@ -4258,9 +4318,20 @@ if (this.p.isFlying || this.p.isUfo) {
 
     const nearbyObjects = this._gameLayer.getNearbySectionObjects(playerWorldX);
     for (const obj of nearbyObjects) {
-      if (obj.type !== solidType && obj.type !== "solid") continue;
+      if (obj.type !== solidType && obj.type !== slopeType) continue;
       const bounds = this._getSpiderSearchBounds(obj);
       if (playerWorldX + xPad <= bounds.left || playerWorldX - xPad >= bounds.right) continue;
+      if (obj.type === slopeType) {
+        const slopeX = Math.max(bounds.left, Math.min(bounds.right, playerWorldX));
+        const slopeY = obj.getSlopeSurfaceY(slopeX);
+        if (slopeY === null) continue;
+        const offset = playerSize / Math.cos(Math.atan(obj.h / obj.w)) - playerSize;
+        if (obj.slopeSolidBelow) {
+          bounds.upper = Math.min(bounds.upper, slopeY + offset);
+        } else {
+          bounds.lower = Math.max(bounds.lower, slopeY - offset);
+        }
+      }
 
       if (goingUp) {
         const undersideSurface = bounds.lower;
@@ -4287,6 +4358,15 @@ if (this.p.isFlying || this.p.isUfo) {
     const playerSize = this.p.isMini ? 18 : 30;
     const _gravAmt = p * 0.6;
     const canSpiderTeleport = this.p.canJump || this.p.onGround || this.p.onCeiling;
+
+    if (this.p._spiderOrbHold) {
+      if (!this.p.upKeyDown) {
+        this.p._spiderOrbHold = false;
+      } else if (canSpiderTeleport) {
+        this.p._spiderOrbHold = false;
+        this.p.upKeyPressed = true;
+      }
+    }
 
     let prioritizeOrb = this._shouldPrioritizeGroundOrbInput();
 
@@ -5022,6 +5102,7 @@ if (this.p.isFlying || this.p.isUfo) {
                 if (_orbId === 1330) {
                   _orbVel = _oShip ? -28 : _oUfo ? -22.4 : _oSpider ? -33 : -30;
                   this.p.gdAccel = true;
+                  if (_oSpider && this.p.upKeyDown) this.p._spiderOrbHold = true;
                 } else {
                   let _base;
                   if (_orbId === 141) {
@@ -5174,6 +5255,10 @@ if (this.p.isFlying || this.p.isUfo) {
           }
           continue;
         } else if (_colType === solidType) {
+          left = rotatedLeft;
+          right = rotatedRight;
+          top = rotatedTop;
+          bottom = rotatedBottom;
           const _solidSize = this.p.isWave ? waveHitSize : playerSize;
           let _0x146a97 = playersY - _solidSize + gamemodeAddition;
           let _0x869e42 = playersLastY - _solidSize + gamemodeAddition;
@@ -5429,17 +5514,18 @@ if (this.p.isFlying || this.p.isUfo) {
       }
     }
     let _0x496456 = this._gameLayer.getCeilingY();
-    if (!_teleportedThisStep && _0x496456 !== null && this.p.y >= _0x496456 - _effectiveSize && !iscube) {
-      this.p.y = _0x496456 - _effectiveSize;
-      this.hitGround();
-      this.p.onCeiling = true;
-    }
-    if (this.p.y > 1890*4) {
-      if (window.noClip) {
-        this.p.diedThisFrame = true;
-      } else {
-        this.killPlayer();
-        return;
+    if (!_teleportedThisStep && _0x496456 !== null && this.p.y >= _0x496456 - _effectiveSize) {
+      if (this.p.gravityFlipped || !iscube) {
+        this.p.y = _0x496456 - _effectiveSize;
+        this.hitGround();
+        this.p.onCeiling = true;
+      } else if (this.p.yVelocity > 0.5 || this.p.y > _0x496456 - _effectiveSize) {
+        if (window.noClip) {
+          this.p.diedThisFrame = true;
+        } else {
+          this.killPlayer();
+          return;
+        }
       }
     }
     if (this._ignoreTeleportUntilClear && !_touchingTeleportDuringRespawnIgnore) {
@@ -5702,7 +5788,7 @@ if (this.p.isFlying || this.p.isUfo) {
     const _0x8bc9f4 = _0x568b25 + 300;
     const _0x11b580 = [
       this._playerSpriteLayer, this._playerGlowLayer, this._playerOverlayLayer, this._playerExtraLayer,
-      this._ballSpriteLayer, this._ballGlowLayer, this._ballOverlayLayer,
+      this._ballSpriteLayer, this._ballGlowLayer, this._ballOverlayLayer, this._ballExtraLayer,
       this._waveSpriteLayer, this._waveOverlayLayer, this._waveExtraLayer, this._waveGlowLayer,
       this._shipSpriteLayer, this._shipGlowLayer, this._shipOverlayLayer, this._shipExtraLayer,
       ...(this._birdLayers || []),
@@ -5853,6 +5939,7 @@ if (this.p.isFlying || this.p.isUfo) {
     this._rotation = 0;
     this.p._robotHold = false;
     this.p._robotHoldTimer = 0;
+    this.p._spiderOrbHold = false;
     this._lastCameraX = 0;
     this._lastCameraY = 0;
     const _resetWorldX = Number(this._scene?._playerWorldX);
